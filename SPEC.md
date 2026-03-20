@@ -167,7 +167,7 @@ xgw start [--config <path>] [--foreground]
 ```
 
 - 默认以后台 daemon 方式运行（通过 `notifier` 调度）。
-- `--foreground`：前台运行，日志输出到 stdout，适合调试。
+- `--foreground`：前台运行，日志同时输出到 stdout 和日志文件，适合调试。
 - 配置文件不存在或校验失败时报错退出（退出码 1）。
 
 ### `xgw stop`

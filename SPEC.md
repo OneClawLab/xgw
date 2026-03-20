@@ -49,7 +49,12 @@ xgw/
 │   │   ├── start.ts          # xgw start --config <path>
 │   │   ├── stop.ts           # xgw stop
 │   │   ├── status.ts         # xgw status [--json]
-│   │   └── send.ts           # xgw send --channel <id> --peer <id> --message <text>
+│   │   ├── send.ts           # xgw send --channel <id> --peer <id> --message <text>
+│   │   ├── reload.ts         # xgw reload
+│   │   ├── route.ts          # xgw route add/remove/list
+│   │   ├── channel-mgmt.ts   # xgw channel add/remove/list/health
+│   │   ├── agent-mgmt.ts     # xgw agent add/remove/list
+│   │   └── config-check.ts   # xgw config check
 │   ├── gateway/
 │   │   ├── server.ts         # HTTP + WebSocket server
 │   │   ├── router.ts         # (peer, channel) → agent routing
@@ -62,7 +67,7 @@ xgw/
 │   │   ├── slack/
 │   │   └── discord/
 │   ├── inbox.ts              # Invoke thread push to write to agent inbox
-│   ├── config.ts             # Config file loading & validation
+│   ├── config.ts             # Config file loading, validation & mutation
 │   ├── logger.ts             # Runtime logging
 │   └── types.ts              # Shared type definitions
 ├── vitest/
@@ -138,6 +143,9 @@ agents:
 interface ChannelPlugin {
   readonly type: string;           // Channel type identifier, e.g. "telegram"
 
+  // Pair: validate credentials and configure channel-side message delivery
+  pair(config: ChannelConfig): Promise<PairResult>;
+
   // Start listening (inbound)
   start(config: ChannelConfig, onMessage: (msg: Message) => Promise<void>): Promise<void>;
 
@@ -154,6 +162,13 @@ interface ChannelPlugin {
 
   // Health check
   health(): Promise<{ ok: boolean; detail?: string }>;
+}
+
+interface PairResult {
+  success: boolean;
+  pair_mode: 'webhook' | 'polling' | 'ws';
+  pair_info: Record<string, string>;   // 渠道特定信息（bot_username、webhook_url 等）
+  error?: string;
 }
 ```
 
@@ -214,6 +229,169 @@ Validate config file syntax and connectivity.
 ```bash
 xgw config check [--config <path>]
 ```
+
+### 5.6 `xgw reload`
+
+通知运行中的 daemon 重新加载配置文件。CLI 管理命令（route/channel/agent）修改 config.yaml 后自动触发 reload，通常不需要手动调用。
+
+```bash
+xgw reload [--config <path>]
+```
+
+- daemon 未运行时静默成功（退出码 0，配置变更会在下次 start 时生效）。
+- 实现方式：向 daemon 进程发送 SIGUSR1（daemon 收到后重新加载配置文件并重建 channel/routing 状态）。
+
+### 5.7 `xgw route` — 路由规则管理
+
+动态管理 `(channel, peer) → agent` 路由规则。修改后自动写入 config.yaml 并触发 daemon reload。
+
+#### `xgw route add`
+
+```bash
+xgw route add --channel <channel-id> --peer <peer-id> --agent <agent-id> [--config <path>]
+```
+
+- 将规则插入到 fallback（`peer=*`）规则之前。
+- 若完全相同的规则已存在，更新其 agent 目标。
+- 修改 config.yaml 后自动触发 `xgw reload`。
+
+#### `xgw route remove`
+
+```bash
+xgw route remove --channel <channel-id> --peer <peer-id> [--config <path>]
+```
+
+- 删除匹配的规则。不存在时报错退出（退出码 1）。
+- 不允许删除最后一条 fallback 规则（`channel=*, peer=*`）。
+
+#### `xgw route list`
+
+```bash
+xgw route list [--json] [--config <path>]
+```
+
+- 列出所有路由规则，按匹配优先级排序。
+
+### 5.8 `xgw channel` — 渠道实例管理
+
+动态管理渠道实例配置。
+
+#### `xgw channel add`
+
+```bash
+xgw channel add --id <id> --type <type> [--set <key>=<value> ...] [--config <path>]
+```
+
+- 添加新渠道实例到 config.yaml，写入基础配置。
+- `--set` 用于设置渠道特有参数（credentials、webhook 模式等）。
+- 同名 id 已存在时报错退出（退出码 1，提示先 remove 再 add）。
+- 此命令只写配置，不启动 channel plugin。需要 `xgw channel pair` 完成配对验证后才能使用。
+
+#### `xgw channel pair`
+
+执行渠道特定的配对/验证流程，确认 credentials 有效并完成渠道侧的接入设置。
+
+```bash
+xgw channel pair --id <id> [--config <path>]
+```
+
+配对流程由 channel plugin 实现，不同渠道差异较大：
+
+| 渠道类型 | 配对流程 | 所需 credentials（通过 `--set` 提供） |
+|---------|---------|--------------------------------------|
+| `telegram` | 调用 `getMe` API 验证 bot token → 设置 webhook 或启动 polling | `token` |
+| `feishu` | 验证 app_id/app_secret → 获取 tenant_access_token → 注册事件订阅 URL | `app_id`, `app_secret`, `verification_token` |
+| `slack` | 验证 bot token → 确认 signing_secret → 注册 Event Subscriptions URL | `token`, `signing_secret` |
+| `discord` | 验证 bot token → 连接 Gateway WebSocket | `token` |
+| `wechat` | 验证 app_id/app_secret → 配置消息接收 URL → 完成 token 验证 | `app_id`, `app_secret`, `token`, `encoding_aes_key` |
+| `tui` | 无需配对（本地直连） | (无) |
+| `webapp` | 无需配对（HTTP server 直接启动） | (无) |
+
+**配对流程通用步骤**：
+
+1. 读取 channel 配置中的 credentials
+2. 调用渠道 API 验证 credentials 有效性
+3. 配置渠道侧的消息接收方式：
+   - Webhook 模式：向渠道注册 xgw 的 webhook URL（`https://<xgw_host>:<port>/webhook/<channel_id>`）
+   - Polling 模式：记录为 polling，daemon 启动时主动轮询
+   - WebSocket 模式：记录为 ws，daemon 启动时主动连接
+4. 将配对结果写入 config.yaml（`paired: true`、`pair_mode: webhook|polling|ws`、`paired_at: <timestamp>`）
+5. 若 daemon 正在运行，自动触发 `xgw reload` 启动新 channel plugin
+
+**交互式配对**：部分渠道（如 Slack OAuth）需要浏览器交互。`pair` 命令会输出 URL 并等待回调完成，或提示用户手动完成后重新运行 `pair`。
+
+**配对状态**：
+
+```yaml
+# config.yaml 中 channel 配对后的状态
+channels:
+  - id: telegram-main
+    type: telegram
+    token: "BOT_TOKEN"
+    paired: true
+    pair_mode: webhook        # webhook | polling | ws
+    pair_info:                # 渠道特定的配对信息
+      bot_username: "my_bot"
+      webhook_url: "https://example.com:18790/webhook/telegram-main"
+    paired_at: "2026-03-20T10:00:00Z"
+```
+
+未配对的 channel（`paired: false` 或无 `paired` 字段）不会被 daemon 启动。`xgw status` 会标注未配对的 channel。
+
+#### `xgw channel remove`
+
+```bash
+xgw channel remove --id <id> [--config <path>]
+```
+
+- 删除渠道实例。同时清理引用该 channel 的路由规则（或报错提示先清理路由）。
+- 修改后自动触发 `xgw reload`（daemon 会停止对应 channel plugin）。
+
+#### `xgw channel list`
+
+```bash
+xgw channel list [--json] [--config <path>]
+```
+
+- 列出所有已配置的渠道实例（id、type、健康状态）。
+
+#### `xgw channel health`
+
+```bash
+xgw channel health [--id <id>] [--json] [--config <path>]
+```
+
+- 对指定渠道（或全部渠道）执行健康检查。
+- 需要 daemon 运行中。daemon 未运行时报错退出（退出码 1）。
+
+### 5.9 `xgw agent` — Agent inbox 注册
+
+管理 xgw 已知的 agent inbox 路径。xgw 入站时需要知道目标 agent 的 inbox thread 路径才能 `thread push`。
+
+#### `xgw agent add`
+
+```bash
+xgw agent add --id <agent-id> --inbox <path> [--config <path>]
+```
+
+- 注册 agent 的 inbox 路径。同名 id 已存在时更新路径。
+- 修改后自动触发 `xgw reload`。
+
+#### `xgw agent remove`
+
+```bash
+xgw agent remove --id <agent-id> [--config <path>]
+```
+
+- 删除 agent 注册。若有路由规则引用该 agent，报错提示先清理路由。
+
+#### `xgw agent list`
+
+```bash
+xgw agent list [--json] [--config <path>]
+```
+
+- 列出所有已注册的 agent 及其 inbox 路径。
 
 ## 6. Message Processing Flows
 

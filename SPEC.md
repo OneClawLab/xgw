@@ -58,18 +58,37 @@ xgw/
 │   ├── gateway/
 │   │   ├── server.ts         # HTTP + WebSocket server
 │   │   ├── router.ts         # (peer, channel) → agent routing
-│   │   ├── normalizer.ts     # Channel message → internal Message normalization
 │   │   └── send.ts           # xgw send outbound delivery implementation
 │   ├── channels/
-│   │   ├── types.ts          # Channel plugin interface definition
-│   │   ├── registry.ts       # Channel plugin registration & loading
-│   │   ├── telegram/
-│   │   ├── slack/
-│   │   └── discord/
+│   │   ├── types.ts          # Channel plugin interface & Message type definitions
+│   │   └── registry.ts       # Channel plugin registration & loading
 │   ├── inbox.ts              # Invoke thread push to write to agent inbox
 │   ├── config.ts             # Config file loading, validation & mutation
 │   ├── logger.ts             # Runtime logging
 │   └── types.ts              # Shared type definitions
+├── plugins/                  # Channel plugins — each is an independent Node project
+│   ├── tui/                  # TUI plugin (localhost Terminal UI, 优先级:高)
+│   │   ├── src/
+│   │   │   └── index.ts      # TuiPlugin implements ChannelPlugin
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── tsup.config.ts
+│   └── webchat/               # Webchat plugin (browser GUI, 优先级:低)
+│       ├── src/
+│       │   └── index.ts      # WebchatPlugin implements ChannelPlugin
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── tsup.config.ts
+├── clients/                  # End-user clients — each is an independent Node project
+│   ├── tui/                  # xgw-tui: terminal chat client (connects to TUI plugin)
+│   │   ├── src/
+│   │   │   └── index.ts      # readline-based TUI, connects via WebSocket
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── tsup.config.ts
+│   └── webchat/              # Webchat client (browser GUI, 优先级:低)
+│       ├── src/
+│       └── package.json
 ├── vitest/
 ├── package.json
 ├── tsconfig.json
@@ -78,6 +97,12 @@ xgw/
 ├── SPEC.md
 └── USAGE.md
 ```
+
+**依赖边界**：
+- `xgw` 核心不依赖任何 plugin 或 client 代码
+- `plugins/*` 依赖 xgw 导出的 `ChannelPlugin` 接口和 `Message` 等类型
+- `clients/*` 只依赖通信协议（WebSocket JSON 消息格式），不依赖任何 xgw 代码
+- 部署时通过 xgw config 将 plugin 配置到 xgw daemon，client 独立运行
 
 ## 3. Configuration
 
@@ -146,13 +171,17 @@ interface ChannelPlugin {
   // Pair: validate credentials and configure channel-side message delivery
   pair(config: ChannelConfig): Promise<PairResult>;
 
-  // Start listening (inbound)
+  // Start listening (inbound).
+  // The plugin is responsible for normalizing raw channel messages into the
+  // internal Message structure before calling onMessage.
   start(config: ChannelConfig, onMessage: (msg: Message) => Promise<void>): Promise<void>;
 
   // Stop listening
   stop(): Promise<void>;
 
-  // Send message (outbound)
+  // Send message (outbound).
+  // The plugin is responsible for converting the structured params into the
+  // channel-specific API call format (reverse normalization).
   send(params: {
     peer_id: string;
     session_id: string;
@@ -172,7 +201,17 @@ interface PairResult {
 }
 ```
 
-TODO: 应该实现两个默认 Channel Plugin，一个用于TUI(localhost里的Terminal UI)(优先级:高)，一个用于 web chat (浏览器里的GUI)(优先级:低)。
+**归一化职责归属**：入站消息的归一化（raw → Message）和出站消息的反归一化（params → channel API call）均由各 Channel Plugin 自行实现，不存在中心化的 normalizer 模块。`Message` 类型定义在 `src/channels/types.ts`，供所有 plugin 引用。
+
+**内置 Channel Plugins**：两个默认 plugin 以独立 Node project 形式存放在 `plugins/` 子目录：
+- `plugins/tui/` — TUI plugin，在 xgw daemon 侧监听本地 WebSocket，接受 `xgw-tui` 客户端连接（优先级：高，随 xgw 核心一起实现）
+- `plugins/webchat/` — Webchat plugin，浏览器 GUI 对应的服务端 plugin（优先级：低，后续实现）
+
+对应的客户端存放在 `clients/` 子目录：
+- `clients/tui/` — `xgw-tui`，readline-based 终端 chat 客户端，通过 WebSocket 连接 TUI plugin
+- `clients/webchat/` — Webchat 客户端，浏览器 GUI（优先级：低）
+
+第三方渠道 plugin（飞书、telegram、slack、discord 等）同样可以按此结构添加到 `plugins/` 下。
 
 ## 5. CLI Commands
 
@@ -307,7 +346,7 @@ xgw channel pair --id <id> [--config <path>]
 | `discord` | 验证 bot token → 连接 Gateway WebSocket | `token` |
 | `wechat` | 验证 app_id/app_secret → 配置消息接收 URL → 完成 token 验证 | `app_id`, `app_secret`, `token`, `encoding_aes_key` |
 | `tui` | 无需配对（本地直连） | (无) |
-| `webapp` | 无需配对（HTTP server 直接启动） | (无) |
+| `webchat` | 无需配对（HTTP server 直接启动） | (无) |
 
 **配对流程通用步骤**：
 
@@ -401,8 +440,7 @@ xgw agent list [--json] [--config <path>]
 
 ```
 Channel webhook/polling
-  → ChannelPlugin.onMessage(raw)
-  → normalizer: raw → Message
+  → ChannelPlugin.start() → onMessage(normalizedMsg)   # plugin 内部完成 raw → Message 归一化
   → router: (channel_id, peer_id) → agent_id
   → inbox.push(agent_id, message)
       → thread push --thread <inbox_path>
@@ -411,8 +449,6 @@ Channel webhook/polling
                     --content <JSON(message)>
   → log
 ```
-
-TODO: normalizer是不是应该放到 每个Channel的 Plugin 来做。
 
 路由找不到匹配 agent 时：记录警告日志，丢弃消息（不报错）。
 
@@ -424,8 +460,7 @@ Agent 的 outbound consumer 触发 `agent deliver`，后者调用：
 xgw send --channel <channel_id> --peer <peer_id> --session <session_id> --message <text>
 ```
 
-xgw 将消息通过对应 ChannelPlugin 投递到渠道。
-TODO: outbound message 也需要 反 normalizer，也应该放到各个 Channel Plugin里。
+xgw 将消息通过对应 ChannelPlugin 投递到渠道。出站参数到渠道 API 的转换（反归一化）由 plugin 的 `send()` 实现负责。
 
 ## 7. Output Format
 
@@ -482,3 +517,145 @@ Error output to `stderr`, format `Error: <what went wrong> - <how to fix>`.
 |----------|-------------|---------|
 | `XGW_CONFIG` | Config file path | `~/.config/xgw/config.yaml` |
 | `XGW_HOME` | Data directory root path | `~/.local/share/xgw` |
+
+## 11. TUI Plugin & Client
+
+### 11.1 Overview
+
+TUI channel 由两个独立组件构成：
+
+- `plugins/tui/` — **TUI plugin**，运行在 xgw daemon 内，监听本地 WebSocket，管理多个客户端连接，每个连接对应一个 peer
+- `clients/tui/` — **`xgw-tui`**，用户运行的终端 chat 客户端，通过 WebSocket 连接到 TUI plugin
+
+```
+xgw-tui (client)
+  │  WebSocket ws://127.0.0.1:<tui_port>
+  ▼
+TUI plugin (server, inside xgw daemon)
+  │  onMessage(normalizedMsg)
+  ▼
+xgw gateway → agent inbox
+```
+
+### 11.2 Configuration
+
+TUI channel 在 xgw config.yaml 中的配置：
+
+```yaml
+channels:
+  - id: tui-main
+    type: tui
+    port: 18791          # TUI plugin 监听的本地 WebSocket 端口（默认 18791）
+    paired: true         # tui 无需 pair，初始化时直接设为 true
+    pair_mode: ws
+```
+
+`pair_mode` 固定为 `ws`（客户端主动连接）。无需 credentials，`xgw channel pair` 对 tui 类型直接成功。
+
+### 11.3 WebSocket Protocol
+
+TUI plugin 与 xgw-tui client 之间使用 JSON 消息帧，每条 WebSocket message 为一个 JSON 对象。
+
+#### 连接握手
+
+客户端连接后立即发送 `hello` 消息，声明自己的身份：
+
+```json
+{ "type": "hello", "channel_id": "tui-main", "peer_id": "alice" }
+```
+
+plugin 回复确认：
+
+```json
+{ "type": "hello_ack", "channel_id": "tui-main", "peer_id": "alice" }
+```
+
+握手失败（channel_id 不存在、peer_id 格式非法等）时 plugin 回复：
+
+```json
+{ "type": "error", "code": "bad_hello", "message": "..." }
+```
+
+并关闭连接。
+
+#### 入站消息（client → plugin）
+
+用户在终端输入后，client 发送：
+
+```json
+{ "type": "message", "text": "hello agent" }
+```
+
+plugin 收到后归一化为内部 `Message`，调用 `onMessage`，写入 agent inbox。
+
+#### 出站消息（plugin → client）
+
+agent 回复时，xgw 调用 `plugin.send()`，plugin 向对应连接推送：
+
+```json
+{ "type": "message", "text": "Hello! How can I help you?" }
+```
+
+#### 心跳
+
+client 每 30 秒发送一次 ping，plugin 回复 pong，用于检测连接存活：
+
+```json
+{ "type": "ping" }
+{ "type": "pong" }
+```
+
+#### 消息归一化
+
+TUI plugin 将客户端消息归一化为内部 `Message` 时：
+
+| Message 字段 | 值 |
+|---|---|
+| `id` | UUID，plugin 生成 |
+| `channel_id` | 握手时的 `channel_id` |
+| `peer_id` | 握手时的 `peer_id` |
+| `peer_name` | 同 `peer_id` |
+| `session_id` | 同 `peer_id`（DM 模式，session_type 固定为 `dm`） |
+| `text` | 消息文本 |
+| `attachments` | `[]` |
+| `reply_to` | `null` |
+| `created_at` | ISO 8601 时间戳 |
+| `raw` | 原始 WebSocket JSON 帧 |
+
+写入 agent inbox 的 source 地址格式：
+
+```
+external:tui:<channel_id>:dm:<peer_id>:<peer_id>
+```
+
+例：`external:tui:tui-main:dm:alice:alice`
+
+### 11.4 `xgw-tui` CLI
+
+```bash
+xgw-tui --channel <channel-id> --peer <peer-id> [--host <host>] [--port <port>]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--channel` | 目标 channel id（对应 config.yaml 中的 channel） | 必填 |
+| `--peer` | 本客户端的 peer 身份标识 | 必填 |
+| `--host` | TUI plugin 地址 | `127.0.0.1` |
+| `--port` | TUI plugin 端口 | `18791` |
+
+**交互行为**：
+
+- 启动后连接 WebSocket，完成握手，进入 readline 交互循环
+- 用户输入一行回车后发送，等待 agent 回复
+- agent 回复异步推送，打印到终端（与用户输入区分，前缀 `agent> `）
+- 输入 `/quit` 或 Ctrl+C 退出
+- 连接断开时自动重连（最多 3 次，指数退避），重连失败后退出（退出码 1）
+
+**输出格式**：
+
+```
+[tui-main/alice] Connected.
+you> hello
+agent> Hello! How can I help you?
+you> _
+```

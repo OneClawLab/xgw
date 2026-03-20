@@ -1,0 +1,21 @@
+{
+  "name": "xgw-plugin-tui",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "TUI channel plugin for xgw",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "@types/ws": "^8.18.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -172,6 +172,8 @@ interface PairResult {
 }
 ```
 
+TODO: 应该实现两个默认 Channel Plugin，一个用于TUI(localhost里的Terminal UI)(优先级:高)，一个用于 web chat (浏览器里的GUI)(优先级:低)。
+
 ## 5. CLI Commands
 
 ### 5.1 `xgw start`
@@ -410,6 +412,8 @@ Channel webhook/polling
   → log
 ```
 
+TODO: normalizer是不是应该放到 每个Channel的 Plugin 来做。
+
 路由找不到匹配 agent 时：记录警告日志，丢弃消息（不报错）。
 
 ### 6.2 Outbound Flow
@@ -421,6 +425,7 @@ xgw send --channel <channel_id> --peer <peer_id> --session <session_id> --messag
 ```
 
 xgw 将消息通过对应 ChannelPlugin 投递到渠道。
+TODO: outbound message 也需要 反 normalizer，也应该放到各个 Channel Plugin里。
 
 ## 7. Output Format
 

@@ -1,5 +1,5 @@
 import type { Message } from './types.js';
-import { execCommand } from './os-utils.js';
+import { execCommand } from './repo-utils/os.js';
 
 export class InboxWriter {
   async push(

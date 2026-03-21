@@ -2,7 +2,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync } from '
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { resolveConfigPath, loadConfig, validateConfig, saveConfig } from '../config.js';
-import { Logger } from '../logger.js';
+import { createFileLogger, createForegroundLogger } from '../repo-utils/logger.js';
 import { ChannelRegistry } from '../channels/registry.js';
 import { GatewayServer } from '../gateway/server.js';
 import { channelWritePairResult } from './channel-mgmt.js';
@@ -114,10 +114,11 @@ export async function startCommand(opts: { config?: string; foreground: boolean 
   }
 
   // 3. Create logger, set foreground mode
-  const logger = new Logger();
-  if (opts.foreground) {
-    logger.setForeground(true);
-  }
+  const xgwHome = process.env['XGW_HOME'] ?? join(homedir(), '.local', 'share', 'xgw');
+  const logsDir = join(xgwHome, 'logs');
+  const logger = opts.foreground
+    ? await createForegroundLogger(logsDir, 'xgw')
+    : await createFileLogger(logsDir, 'xgw');
 
   logger.info('xgw starting...');
 

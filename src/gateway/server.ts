@@ -5,7 +5,7 @@ import type { GatewayStats, Message } from '../types.js';
 import { Router } from './router.js';
 import { InboxWriter } from '../inbox.js';
 import type { ChannelRegistry } from '../channels/registry.js';
-import type { Logger } from '../logger.js';
+import type { Logger } from '../repo-utils/logger.js';
 
 export class GatewayServer {
   private server: Server | null = null;

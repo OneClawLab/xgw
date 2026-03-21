@@ -1,6 +1,7 @@
-#!/usr/bin/env node
-
 import { Command } from 'commander';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { resolveConfigPath, loadConfig, saveConfig } from './config.js';
 import { routeAdd, routeRemove, routeList } from './commands/route.js';
 import { agentAdd, agentRemove, agentList } from './commands/agent-mgmt.js';
@@ -13,6 +14,9 @@ function errorExit(msg: string, code: 1 | 2 = 1): never {
   process.exit(code);
 }
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')) as { version: string };
+
 // ── Program ────────────────────────────────────────────────────────
 
 const program = new Command();
@@ -20,7 +24,7 @@ const program = new Command();
 program
   .name('xgw')
   .description('xgw - communication gateway daemon & CLI for TheClaw')
-  .version('1.0.0');
+  .version(pkg.version);
 
 // ── start ──────────────────────────────────────────────────────────
 

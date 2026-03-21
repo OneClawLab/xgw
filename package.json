@@ -1,17 +1,29 @@
 {
-  "name": "xgw",
+  "name": "@theclawlab/xgw",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "xgw - communication gateway daemon & CLI for TheClaw",
   "bin": {
-    "xgw": "./dist/index.js"
+    "xgw": "dist/index.js"
   },
   "scripts": {
     "dev": "tsup --watch",
     "build": "tsup",
     "test": "vitest",
-    "release:local": "npm run build && npm link"
+    "release:local": "npm run build && npm link",
+    "release:public": "npm test && npm run build && npm publish --access public",
+    "release:public:skip-test": "npm run build && npm publish --access public"
   },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "USAGE.md"
+  ],
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.4.0",

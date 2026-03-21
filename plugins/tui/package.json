@@ -1,14 +1,25 @@
 {
-  "name": "xgw-plugin-tui",
+  "name": "@theclawlab/xgw-plugin-tui",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "TUI channel plugin for xgw",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
-    "dev": "tsup --watch"
+    "dev": "tsup --watch",
+    "release:public": "npm run build && npm publish --access public",
+    "release:public:skip-test": "npm run build && npm publish --access public"
   },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "devDependencies": {
     "@types/node": "^25.4.0",
     "@types/ws": "^8.18.0",

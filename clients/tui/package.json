@@ -1,16 +1,27 @@
 {
-  "name": "xgw-tui",
+  "name": "@theclawlab/xgw-tui",
   "type": "module",
-  "version": "1.0.0",
-  "description": "Terminal chat client for xgw TUI plugin",
+  "version": "1.0.3",
+  "description": "Terminal chat client for TheClaw",
   "bin": {
-    "xgw-tui": "./dist/index.js"
+    "xgw-tui": "dist/index.js"
   },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "release:local": "npm run build && npm link"
+    "release:local": "npm run build && npm link",
+    "release:public": "npm run build && npm publish --access public",
+    "release:public:skip-test": "npm run build && npm publish --access public"
   },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "devDependencies": {
     "@types/node": "^25.4.0",
     "@types/ws": "^8.18.0",

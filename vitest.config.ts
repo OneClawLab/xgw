@@ -7,6 +7,7 @@ export default defineConfig({
     watch: false,
     testTimeout: 10000,
     fileParallelism: false,
+    include: ['vitest/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

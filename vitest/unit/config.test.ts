@@ -6,8 +6,8 @@ import { homedir } from 'node:os';
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveConfigPath, validateConfig, saveConfig, loadConfig } from '../src/config.js';
-import type { Config, ValidationResult } from '../src/config.js';
+import { resolveConfigPath, validateConfig, saveConfig, loadConfig } from '../../src/config.js';
+import type { Config, ValidationResult } from '../../src/config.js';
 
 // ── Generators ─────────────────────────────────────────────────────
 

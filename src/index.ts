@@ -14,6 +14,16 @@ function errorExit(msg: string, code: 1 | 2 = 1): never {
   process.exit(code);
 }
 
+/** Merge --config from parent program opts into local opts (mutates) */
+function mergeConfigOpt(localOpts: { config?: string }): void {
+  if (localOpts.config === undefined) {
+    const parentConfig = program.opts<{ config?: string }>().config;
+    if (parentConfig !== undefined) {
+      localOpts.config = parentConfig;
+    }
+  }
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')) as { version: string };
 
@@ -24,7 +34,10 @@ const program = new Command();
 program
   .name('xgw')
   .description('xgw - communication gateway daemon & CLI for TheClaw')
-  .version(pkg.version);
+  .version(pkg.version)
+  .option('--config <path>', 'config file path')
+  .enablePositionalOptions()
+  .passThroughOptions();
 
 // ── start ──────────────────────────────────────────────────────────
 
@@ -35,6 +48,7 @@ program
   .option('--foreground', 'run in foreground mode', false)
   .action(async (opts: { config?: string; foreground: boolean }) => {
     try {
+      mergeConfigOpt(opts);
       const mod = await import('./commands/start.js');
       await mod.startCommand(opts);
     } catch (err) {
@@ -50,6 +64,7 @@ program
   .option('--config <path>', 'config file path')
   .action(async (opts: { config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const mod = await import('./commands/stop.js');
       await mod.stopCommand(opts);
     } catch (err) {
@@ -66,6 +81,7 @@ program
   .option('--json', 'output as JSON', false)
   .action(async (opts: { config?: string; json: boolean }) => {
     try {
+      mergeConfigOpt(opts);
       const mod = await import('./commands/status.js');
       await mod.statusCommand(opts);
     } catch (err) {
@@ -95,6 +111,7 @@ program
     json: boolean;
   }) => {
     try {
+      mergeConfigOpt(opts);
       const mod = await import('./commands/send.js');
       await mod.sendCommand(opts);
     } catch (err) {
@@ -110,6 +127,7 @@ program
   .option('--config <path>', 'config file path')
   .action(async (opts: { config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const mod = await import('./commands/reload.js');
       await mod.reloadCommand(opts);
     } catch (err) {
@@ -129,6 +147,7 @@ configCmd
   .option('--config <path>', 'config file path')
   .action(async (opts: { config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const mod = await import('./commands/config-check.js');
       await mod.configCheckCommand(opts);
     } catch (err) {
@@ -151,6 +170,7 @@ routeCmd
   .option('--config <path>', 'config file path')
   .action((opts: { channel: string; peer: string; agent: string; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const configPath = resolveConfigPath(opts.config);
       const config = loadConfig(configPath);
       const updated = routeAdd(config, opts.channel, opts.peer, opts.agent);
@@ -169,6 +189,7 @@ routeCmd
   .option('--config <path>', 'config file path')
   .action((opts: { channel: string; peer: string; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const configPath = resolveConfigPath(opts.config);
       const config = loadConfig(configPath);
       const updated = routeRemove(config, opts.channel, opts.peer);
@@ -186,6 +207,7 @@ routeCmd
   .option('--config <path>', 'config file path')
   .action((opts: { json: boolean; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const configPath = resolveConfigPath(opts.config);
       const config = loadConfig(configPath);
       const rules = routeList(config);
@@ -220,6 +242,7 @@ channelCmd
   .option('--config <path>', 'config file path')
   .action((opts: { id: string; type: string; set?: string[]; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const configPath = resolveConfigPath(opts.config);
       const config = loadConfig(configPath);
       const extra: Record<string, unknown> = {};
@@ -247,6 +270,7 @@ channelCmd
   .option('--config <path>', 'config file path')
   .action((opts: { id: string; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const configPath = resolveConfigPath(opts.config);
       const config = loadConfig(configPath);
       const updated = channelRemove(config, opts.id);
@@ -264,6 +288,7 @@ channelCmd
   .option('--config <path>', 'config file path')
   .action((opts: { json: boolean; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const configPath = resolveConfigPath(opts.config);
       const config = loadConfig(configPath);
       const channels = channelList(config);
@@ -291,6 +316,7 @@ channelCmd
   .option('--config <path>', 'config file path')
   .action(async (opts: { id?: string; json: boolean; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const mod = await import('./commands/status.js');
       await mod.channelHealthCommand(opts);
     } catch (err) {
@@ -305,6 +331,7 @@ channelCmd
   .option('--config <path>', 'config file path')
   .action(async (opts: { id: string; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const mod = await import('./commands/start.js');
       await mod.channelPairCommand(opts);
     } catch (err) {
@@ -326,6 +353,7 @@ agentCmd
   .option('--config <path>', 'config file path')
   .action((opts: { id: string; inbox: string; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const configPath = resolveConfigPath(opts.config);
       const config = loadConfig(configPath);
       const updated = agentAdd(config, opts.id, opts.inbox);
@@ -343,6 +371,7 @@ agentCmd
   .option('--config <path>', 'config file path')
   .action((opts: { id: string; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const configPath = resolveConfigPath(opts.config);
       const config = loadConfig(configPath);
       const updated = agentRemove(config, opts.id);
@@ -360,6 +389,7 @@ agentCmd
   .option('--config <path>', 'config file path')
   .action((opts: { json: boolean; config?: string }) => {
     try {
+      mergeConfigOpt(opts);
       const configPath = resolveConfigPath(opts.config);
       const config = loadConfig(configPath);
       const agents = agentList(config);
@@ -382,6 +412,11 @@ agentCmd
 // ── Parse and run ──────────────────────────────────────────────────
 
 program.exitOverride();
+for (const sub of program.commands) {
+  for (const leaf of sub.commands) {
+    leaf.exitOverride();
+  }
+}
 
 try {
   await program.parseAsync(process.argv);

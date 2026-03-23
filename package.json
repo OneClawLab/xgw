@@ -1,7 +1,7 @@
 {
   "name": "@theclawlab/xgw",
   "type": "module",
-  "version": "1.0.3",
+  "version": "1.0.8",
   "description": "xgw - communication gateway daemon & CLI for TheClaw",
   "bin": {
     "xgw": "dist/index.js"

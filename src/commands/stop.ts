@@ -34,7 +34,22 @@ export async function stopCommand(_opts: { config?: string }): Promise<void> {
     process.kill(pid, 0);
     // Send SIGTERM for graceful shutdown
     process.kill(pid, 'SIGTERM');
-    process.stdout.write(`Daemon stopped (PID ${pid}).\n`);
+
+    // Poll for up to 5 seconds
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 200));
+      try { process.kill(pid, 0); } catch { break; }
+    }
+
+    try { process.kill(pid, 0); } catch {
+      try { unlinkSync(pidFile); } catch { /* ignore */ }
+      process.stdout.write(`Daemon stopped (PID ${pid}).\n`);
+      return;
+    }
+
+    process.stderr.write(`Daemon (PID ${pid}) did not stop within 5 seconds. Try: kill -9 ${pid}\n`);
+    process.exit(1);
   } catch {
     // Process not running — clean up stale PID file
     try { unlinkSync(pidFile); } catch { /* ignore */ }

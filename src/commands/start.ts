@@ -52,6 +52,28 @@ function isProcessRunning(pid: number): boolean {
   }
 }
 
+/** Poll for PID file to appear and contain a live PID, up to `timeoutMs`. */
+async function waitForReady(timeoutMs: number): Promise<number | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 100));
+    const pid = readPidFile();
+    if (pid !== null && isProcessRunning(pid)) return pid;
+  }
+  return null;
+}
+
+/**
+ * Filter execArgv to pass through loader flags (tsx, esm) but drop
+ * debug/inspect flags that would cause port conflicts in the child.
+ */
+function safeExecArgv(): string[] {
+  return process.execArgv.filter(arg =>
+    !arg.startsWith('--inspect') &&
+    !arg.startsWith('--debug')
+  );
+}
+
 
 /**
  * Attempt to dynamically load a channel plugin by type name.
@@ -103,6 +125,35 @@ export async function startCommand(opts: { config?: string; foreground: boolean 
     throw new Error(`Daemon already running (PID ${existingPid}) - Stop it first with 'xgw stop'`);
   }
 
+  if (!opts.foreground) {
+    // Background mode: spawn detached child that re-invokes with --foreground
+    const { spawn } = await import('node:child_process');
+    const xgwHome = getXgwHome();
+    const logsDir = join(xgwHome, 'logs');
+    mkdirSync(logsDir, { recursive: true });
+    const logFile = join(logsDir, 'xgw.log');
+    const { openSync } = await import('node:fs');
+    const logFd = openSync(logFile, 'a');
+    const script = process.argv[1] ?? '';
+    const extraArgs = opts.config ? ['--config', opts.config] : [];
+    // Do NOT forward --inspect/--debug flags to avoid port conflicts
+    const child = spawn(process.execPath, [...safeExecArgv(), script, ...extraArgs, 'start', '--foreground'], {
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+      env: { ...process.env, XGW_DAEMON: '1' },
+    });
+    child.unref();
+
+    // Wait up to 5s for daemon to write its PID file
+    const pid = await waitForReady(5000);
+    if (pid === null) {
+      throw new Error('Daemon did not start within 5 seconds. Check logs: ' + logFile);
+    }
+    process.stdout.write(`Daemon started (PID: ${pid})\n`);
+    return;
+  }
+
+  // Foreground mode: run daemon in this process
   // 2. Resolve config path, load and validate
   const configPath = resolveConfigPath(opts.config);
   const config = loadConfig(configPath);

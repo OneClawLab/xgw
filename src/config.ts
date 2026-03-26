@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import type { ChannelConfig } from './channels/types.js';
+import type { XarConfig } from './xar/types.js';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -27,6 +28,8 @@ export interface Config {
   channels: ChannelConfig[];
   routing: RoutingRule[];
   agents: Record<string, { inbox: string }>;
+  /** Optional xar IPC connection config (v2 mode) */
+  xar?: XarConfig;
 }
 
 export interface ValidationResult {
@@ -168,7 +171,71 @@ export function validateConfig(config: unknown): ValidationResult {
     }
   }
 
+  // ── xar (optional) ──
+  if ('xar' in c && c['xar'] !== undefined) {
+    const xarResult = parseXarConfig(c['xar']);
+    if (!xarResult.ok) {
+      errors.push(xarResult.error);
+    }
+  }
+
   return { valid: errors.length === 0, errors };
+}
+
+// ── XarConfig defaults ─────────────────────────────────────────────
+
+const XAR_DEFAULTS: XarConfig = {
+  socket: '~/.theclaw/xar.sock',
+  port: 18792,
+  reconnect_interval_ms: 3000,
+};
+
+/**
+ * Parse and validate the xar config section from a raw config object.
+ * Fills in defaults for missing fields.
+ * Returns { ok: true, value } on success, or { ok: false, error } on format error.
+ */
+export function parseXarConfig(
+  raw: unknown,
+): { ok: true; value: XarConfig } | { ok: false; error: string } {
+  if (raw == null) {
+    return { ok: true, value: { ...XAR_DEFAULTS } };
+  }
+
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, error: 'Field xar must be an object - Fix the xar section in your config file' };
+  }
+
+  const x = raw as Record<string, unknown>;
+
+  // socket
+  let socket = XAR_DEFAULTS.socket;
+  if ('socket' in x) {
+    if (typeof x['socket'] !== 'string' || x['socket'] === '') {
+      return { ok: false, error: 'Field xar.socket has invalid type (expected non-empty string) - Fix the value in your config file' };
+    }
+    socket = x['socket'];
+  }
+
+  // port
+  let port = XAR_DEFAULTS.port;
+  if ('port' in x) {
+    if (typeof x['port'] !== 'number' || !Number.isInteger(x['port']) || x['port'] <= 0 || x['port'] > 65535) {
+      return { ok: false, error: 'Field xar.port has invalid value (expected integer 1-65535) - Fix the value in your config file' };
+    }
+    port = x['port'];
+  }
+
+  // reconnect_interval_ms
+  let reconnect_interval_ms = XAR_DEFAULTS.reconnect_interval_ms;
+  if ('reconnect_interval_ms' in x) {
+    if (typeof x['reconnect_interval_ms'] !== 'number' || !Number.isInteger(x['reconnect_interval_ms']) || x['reconnect_interval_ms'] <= 0) {
+      return { ok: false, error: 'Field xar.reconnect_interval_ms has invalid value (expected positive integer) - Fix the value in your config file' };
+    }
+    reconnect_interval_ms = x['reconnect_interval_ms'];
+  }
+
+  return { ok: true, value: { socket, port, reconnect_interval_ms } };
 }
 
 /**

@@ -6,6 +6,8 @@ import { Router } from './router.js';
 import { InboxWriter } from '../inbox.js';
 import type { ChannelRegistry } from '../channels/registry.js';
 import type { Logger } from '../repo-utils/logger.js';
+import type { XarClient } from '../xar/client.js';
+import { Dispatcher } from '../xar/dispatcher.js';
 
 export class GatewayServer {
   private server: Server | null = null;
@@ -17,11 +19,14 @@ export class GatewayServer {
   private messagesOut = 0;
   private config: Config | null = null;
   private registry: ChannelRegistry | null = null;
+  private xarClient: XarClient | undefined;
+  private dispatcher: Dispatcher | undefined;
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, xarClient?: XarClient) {
     this.router = new Router();
     this.inbox = new InboxWriter();
     this.logger = logger;
+    this.xarClient = xarClient;
   }
 
   async start(config: Config, registry: ChannelRegistry): Promise<void> {
@@ -30,7 +35,17 @@ export class GatewayServer {
     this.router.reload(config.routing);
     this.startTime = Date.now();
 
-    // Create onMessage handler: plugin → router → inbox
+    // Connect XarClient and wire up Dispatcher if provided
+    if (this.xarClient) {
+      this.dispatcher = new Dispatcher(registry, this.logger);
+      const dispatcher = this.dispatcher;
+      this.xarClient.onOutbound((event) => {
+        dispatcher.handle(event);
+      });
+      await this.xarClient.connect();
+    }
+
+    // Create onMessage handler: plugin → router → xarClient (or inbox fallback)
     const onMessage = async (msg: Message): Promise<void> => {
       this.messagesIn++;
       const agentId = this.router.resolve(msg.channel_id, msg.peer_id);
@@ -48,8 +63,27 @@ export class GatewayServer {
       this.logger.info(
         `inbound: channel=${msg.channel_id} peer=${msg.peer_id} → agent=${agentId} msg_id=${msg.id}`,
       );
-      await this.inbox.push(agentId, msg, channelType, config.agents);
-      this.logger.info(`inbox push: agent=${agentId} thread=${config.agents[agentId]?.inbox}`);
+
+      if (this.xarClient) {
+        // v2: send via XarClient IPC
+        const source = `external:${channelType}:${msg.channel_id}:dm:${msg.session_id}:${msg.peer_id}`;
+        await this.xarClient.sendInbound(agentId, {
+          source,
+          content: msg.text,
+          reply_context: {
+            channel_type: channelType,
+            channel_id: msg.channel_id,
+            session_type: 'dm',
+            session_id: msg.session_id,
+            peer_id: msg.peer_id,
+          },
+        });
+        this.logger.info(`xar send: agent=${agentId}`);
+      } else {
+        // v1 fallback: push via InboxWriter (for xgw send CLI / diagnostics)
+        await this.inbox.push(agentId, msg, channelType, config.agents);
+        this.logger.info(`inbox push: agent=${agentId} thread=${config.agents[agentId]?.inbox}`);
+      }
     };
 
     // Start all paired channels
@@ -74,6 +108,9 @@ export class GatewayServer {
   async stop(): Promise<void> {
     if (this.registry) {
       await this.registry.stopAll();
+    }
+    if (this.xarClient) {
+      this.xarClient.close();
     }
     if (this.server) {
       await new Promise<void>((resolve, reject) => {

@@ -1,10 +1,11 @@
 import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { resolveConfigPath, loadConfig, validateConfig, saveConfig } from '../config.js';
+import { resolveConfigPath, loadConfig, validateConfig, saveConfig, parseXarConfig } from '../config.js';
 import { createFileLogger, createForegroundLogger } from '../repo-utils/logger.js';
 import { ChannelRegistry } from '../channels/registry.js';
 import { GatewayServer } from '../gateway/server.js';
+import { XarClient } from '../xar/client.js';
 import { channelWritePairResult } from './channel-mgmt.js';
 import type { ChannelPlugin } from '../channels/types.js';
 
@@ -192,15 +193,26 @@ export async function startCommand(opts: { config?: string; foreground: boolean 
   // 5. Load plugins from config (maps channel ids to plugin instances)
   registry.loadPlugins(config.channels);
 
-  // 6. Create and start gateway server (starts all paired channels)
-  const server = new GatewayServer(logger);
+  // 6. Create XarClient if xar config is present
+  let xarClient: XarClient | undefined;
+  if (config.xar !== undefined) {
+    const xarResult = parseXarConfig(config.xar);
+    if (!xarResult.ok) {
+      throw new Error(`Invalid xar configuration: ${xarResult.error}`);
+    }
+    xarClient = new XarClient(xarResult.value, logger);
+    logger.info('XarClient created (v2 IPC mode)');
+  }
+
+  // 7. Create and start gateway server (starts all paired channels)
+  const server = new GatewayServer(logger, xarClient);
   await server.start(config, registry);
 
-  // 7. Write PID file
+  // 8. Write PID file
   writePidFile();
   logger.info(`PID file written: ${getPidFilePath()} (pid=${process.pid})`);
 
-  // 8. Handle SIGUSR1 for config reload
+  // 9. Handle SIGUSR1 for config reload
   process.on('SIGUSR1', () => {
     try {
       logger.info('reload signal received (SIGUSR1)');
@@ -217,7 +229,7 @@ export async function startCommand(opts: { config?: string; foreground: boolean 
     }
   });
 
-  // 9. Handle graceful shutdown
+  // 10. Handle graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
     logger.info(`${signal} received, shutting down...`);
     try {
@@ -233,7 +245,7 @@ export async function startCommand(opts: { config?: string; foreground: boolean 
   process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
   process.on('SIGINT', () => { void shutdown('SIGINT'); });
 
-  // 10. In foreground mode the process stays alive due to the HTTP server.
+  // 11. In foreground mode the process stays alive due to the HTTP server.
   //     In daemon mode (future): use notifier to daemonize.
   //     For now both modes run in foreground — the HTTP server keeps the event loop alive.
   if (opts.foreground) {

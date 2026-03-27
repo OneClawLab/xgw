@@ -28,6 +28,8 @@ export interface Config {
   channels: ChannelConfig[];
   routing: RoutingRule[];
   agents: Record<string, { inbox: string }>;
+  /** Plugin registry: type → npm package name */
+  plugins?: Record<string, string>;
   /** Optional xar IPC connection config (v2 mode) */
   xar?: XarConfig;
 }
@@ -171,6 +173,19 @@ export function validateConfig(config: unknown): ValidationResult {
     }
   }
 
+  // ── plugins (optional) ──
+  if ('plugins' in c && c['plugins'] !== undefined) {
+    if (typeof c['plugins'] !== 'object' || Array.isArray(c['plugins'])) {
+      errors.push('Field plugins must be an object mapping type names to npm package names');
+    } else {
+      for (const [type, pkg] of Object.entries(c['plugins'] as object)) {
+        if (typeof pkg !== 'string' || pkg === '') {
+          errors.push(`plugins.${type} must be a non-empty string (npm package name)`);
+        }
+      }
+    }
+  }
+
   // ── xar (optional) ──
   if ('xar' in c && c['xar'] !== undefined) {
     const xarResult = parseXarConfig(c['xar']);
@@ -185,7 +200,7 @@ export function validateConfig(config: unknown): ValidationResult {
 // ── XarConfig defaults ─────────────────────────────────────────────
 
 const XAR_DEFAULTS: XarConfig = {
-  socket: '~/.theclaw/xar.sock',
+  socket: homedir() + '/.theclaw/xar.sock',
   port: 18792,
   reconnect_interval_ms: 3000,
 };
@@ -208,13 +223,17 @@ export function parseXarConfig(
 
   const x = raw as Record<string, unknown>;
 
-  // socket
+  // socket — expand tilde
   let socket = XAR_DEFAULTS.socket;
   if ('socket' in x) {
     if (typeof x['socket'] !== 'string' || x['socket'] === '') {
       return { ok: false, error: 'Field xar.socket has invalid type (expected non-empty string) - Fix the value in your config file' };
     }
     socket = x['socket'];
+  }
+  // Expand leading ~ to home directory
+  if (socket.startsWith('~/') || socket === '~') {
+    socket = socket.replace(/^~/, homedir())
   }
 
   // port

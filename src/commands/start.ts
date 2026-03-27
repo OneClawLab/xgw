@@ -1,6 +1,8 @@
 import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { resolveConfigPath, loadConfig, validateConfig, saveConfig, parseXarConfig } from '../config.js';
 import { createFileLogger, createForegroundLogger } from '../repo-utils/logger.js';
 import { ChannelRegistry } from '../channels/registry.js';
@@ -81,39 +83,63 @@ function safeExecArgv(): string[] {
  * For now only the built-in TUI plugin path is known; other types
  * will be resolved from a conventional path pattern in the future.
  */
-async function loadPluginForType(type: string): Promise<ChannelPlugin> {
-  // Convention: plugins/<type>/dist/index.js  (built output)
-  // For TUI we also accept the source path during development
-  const pluginPaths: Record<string, string> = {
-    tui: '../../../plugins/tui/dist/index.js',
-  };
+async function loadPluginForType(type: string, config: Config): Promise<ChannelPlugin> {
+  const __dirname = dirname(fileURLToPath(import.meta.url))
 
-  const modulePath = pluginPaths[type];
-  if (!modulePath) {
-    throw new Error(
-      `No plugin found for channel type ${type} - Install the plugin or check the type name`,
-    );
+  // Resolve npm package name: channel-level override > global plugins registry
+  const channelOverride = config.channels.find(ch => ch.type === type && typeof ch['plugin'] === 'string')?.['plugin'] as string | undefined
+  const registeredPkg = config.plugins?.[type]
+  const pkgName = channelOverride ?? registeredPkg
+
+  let modulePath: string | undefined
+
+  if (pkgName) {
+    // Resolve npm package (globally installed or locally linked)
+    try {
+      modulePath = createRequire(import.meta.url).resolve(pkgName)
+    } catch {
+      throw new Error(
+        `Plugin package "${pkgName}" for type "${type}" is not installed. ` +
+        `Run: npm install -g ${pkgName}`,
+      )
+    }
+  } else {
+    // Development fallback: built-in plugins/<type>/dist/index.js
+    const builtinPath = join(__dirname, '..', 'plugins', type, 'dist', 'index.js')
+    if (existsSync(builtinPath)) {
+      modulePath = builtinPath
+    }
   }
 
+  if (!modulePath) {
+    throw new Error(
+      `No plugin found for channel type "${type}". ` +
+      `Register one with: xgw plugin add ${type} <npm-package-name>`,
+    )
+  }
+
+  // On Windows, convert absolute path to file:// URL for ESM import()
+  const moduleUrl = process.platform === 'win32' && !modulePath.startsWith('file://')
+    ? new URL(`file:///${modulePath.replace(/\\/g, '/')}`).href
+    : modulePath
+
   try {
-    const mod = await import(modulePath) as Record<string, unknown>;
-    // Plugin module should export a default class or a `createPlugin` factory
+    const mod = await import(moduleUrl) as Record<string, unknown>
     if (typeof mod['default'] === 'function') {
-      return new (mod['default'] as new () => ChannelPlugin)();
+      return new (mod['default'] as new () => ChannelPlugin)()
     }
     if (typeof mod['createPlugin'] === 'function') {
-      return (mod['createPlugin'] as () => ChannelPlugin)();
+      return (mod['createPlugin'] as () => ChannelPlugin)()
     }
-    // Try TuiPlugin named export
     if (typeof mod['TuiPlugin'] === 'function') {
-      return new (mod['TuiPlugin'] as new () => ChannelPlugin)();
+      return new (mod['TuiPlugin'] as new () => ChannelPlugin)()
     }
-    throw new Error(`Plugin module for type "${type}" has no default export, createPlugin, or TuiPlugin export`);
+    throw new Error(`Plugin module for type "${type}" has no default export, createPlugin, or TuiPlugin export`)
   } catch (err) {
-    if (err instanceof Error && err.message.includes('No plugin found')) throw err;
+    if (err instanceof Error && (err.message.includes('No plugin found') || err.message.includes('not installed'))) throw err
     throw new Error(
-      `Failed to load plugin for channel type ${type} - ${err instanceof Error ? err.message : String(err)}`,
-    );
+      `Failed to load plugin for channel type "${type}" - ${err instanceof Error ? err.message : String(err)}`,
+    )
   }
 }
 
@@ -182,11 +208,11 @@ export async function startCommand(opts: { config?: string; foreground: boolean 
 
   for (const type of channelTypes) {
     try {
-      const plugin = await loadPluginForType(type);
-      registry.register(type, plugin);
-      logger.info(`plugin loaded: type=${type}`);
+      const plugin = await loadPluginForType(type, config)
+      registry.register(type, plugin)
+      logger.info(`plugin loaded: type=${type}`)
     } catch (err) {
-      logger.error(`plugin load failed: type=${type} - ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(`plugin load failed: type=${type} - ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -272,7 +298,7 @@ export async function channelPairCommand(opts: { id: string; config?: string }):
   }
 
   // 3. Load the plugin for that channel type
-  const plugin = await loadPluginForType(channel.type);
+  const plugin = await loadPluginForType(channel.type, config)
 
   // 4. Call plugin.pair(channelConfig)
   process.stderr.write(`Pairing channel ${opts.id} (type=${channel.type})...\n`);

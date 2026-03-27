@@ -92,11 +92,14 @@ describe('XarClient — Unix socket priority / TCP fallback', () => {
 
     await client.connect();
 
-    // Should have warned about Unix socket failure and fallen back
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Unix socket failed'),
-    );
-    // Should have logged successful connection to TCP URL
+    // On Windows, Unix socket is skipped entirely — goes straight to TCP
+    // On Unix, it tries Unix socket first and warns on failure
+    if (process.platform !== 'win32') {
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unix socket failed'),
+      );
+    }
+    // Either way, should have logged successful connection to TCP URL
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining(`ws://127.0.0.1:${port}`),
     );

@@ -6,6 +6,7 @@ import { resolveConfigPath, loadConfig, saveConfig } from './config.js';
 import { routeAdd, routeRemove, routeList } from './commands/route.js';
 import { agentAdd, agentRemove, agentList } from './commands/agent-mgmt.js';
 import { channelAdd, channelRemove, channelList } from './commands/channel-mgmt.js';
+import { pluginAdd, pluginRemove, pluginList } from './commands/plugin-mgmt.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -409,10 +410,81 @@ agentCmd
     }
   });
 
+// ── plugin ──────────────────────────────────────────────────────────
+
+const pluginCmd = program
+  .command('plugin')
+  .description('Manage channel plugins');
+
+pluginCmd
+  .command('add')
+  .description('Register a plugin package for a channel type')
+  .argument('<type>', 'channel type (e.g. telegram)')
+  .argument('<package>', 'npm package name (e.g. @theclawlab/xgw-plugin-telegram)')
+  .option('--config <path>', 'config file path')
+  .action((type: string, pkg: string, opts: { config?: string }) => {
+    try {
+      mergeConfigOpt(opts);
+      const configPath = resolveConfigPath(opts.config);
+      const config = loadConfig(configPath);
+      const updated = pluginAdd(config, type, pkg);
+      saveConfig(configPath, updated);
+      process.stdout.write(`Plugin registered: type=${type} package=${pkg}\n`);
+    } catch (err) {
+      errorExit(err instanceof Error ? err.message : String(err));
+    }
+  });
+
+pluginCmd
+  .command('remove')
+  .description('Unregister a plugin')
+  .argument('<type>', 'channel type')
+  .option('--config <path>', 'config file path')
+  .action((type: string, opts: { config?: string }) => {
+    try {
+      mergeConfigOpt(opts);
+      const configPath = resolveConfigPath(opts.config);
+      const config = loadConfig(configPath);
+      const updated = pluginRemove(config, type);
+      saveConfig(configPath, updated);
+      process.stdout.write(`Plugin removed: type=${type}\n`);
+    } catch (err) {
+      errorExit(err instanceof Error ? err.message : String(err));
+    }
+  });
+
+pluginCmd
+  .command('list')
+  .description('List registered plugins')
+  .option('--json', 'output as JSON', false)
+  .option('--config <path>', 'config file path')
+  .action((opts: { json: boolean; config?: string }) => {
+    try {
+      mergeConfigOpt(opts);
+      const configPath = resolveConfigPath(opts.config);
+      const config = loadConfig(configPath);
+      const plugins = pluginList(config);
+      if (opts.json) {
+        process.stdout.write(JSON.stringify(plugins, null, 2) + '\n');
+      } else {
+        if (plugins.length === 0) {
+          process.stdout.write('No plugins registered. Use: xgw plugin add <type> <package>\n');
+        } else {
+          for (const p of plugins) {
+            process.stdout.write(`type=${p.type}  package=${p.package}\n`);
+          }
+        }
+      }
+    } catch (err) {
+      errorExit(err instanceof Error ? err.message : String(err));
+    }
+  });
+
 // ── Parse and run ──────────────────────────────────────────────────
 
 program.exitOverride();
 for (const sub of program.commands) {
+  sub.exitOverride()
   for (const leaf of sub.commands) {
     leaf.exitOverride();
   }

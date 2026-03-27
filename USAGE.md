@@ -23,30 +23,108 @@ npm run build && npm link
 
 ```yaml
 gateway:
-  host: "0.0.0.0"
-  port: 8080
+  host: 127.0.0.1
+  port: 18790
+
+# xar IPC 连接配置（v2 模式）
+xar:
+  socket: ~/.theclaw/xar.sock   # Unix socket（优先，Linux/macOS）
+  port: 18792                   # TCP fallback 端口（Windows 或 Unix socket 不可用时）
+  reconnect_interval_ms: 3000   # 断线重连间隔
+
+# 插件注册表：type → npm 包名
+# 内置 tui 插件无需注册
+plugins:
+  telegram: "@theclawlab/xgw-plugin-telegram"
+  feishu: "@theclawlab/xgw-plugin-feishu"
 
 channels:
-  - id: telegram
-    type: tui          # 目前支持 tui；其他类型通过插件扩展
-    paired: false
+  - id: tui-main
+    type: tui
+    port: 18791
+    paired: true
+    pair_mode: ws
+
+  - id: tg-main
+    type: telegram
+    token: "BOT_TOKEN"
+    paired: true
+    pair_mode: webhook
 
 agents:
-  my-agent:
-    inbox: /home/user/.theclaw/agents/my-agent/inbox
+  admin:
+    inbox: ~/.theclaw/agents/admin/inbox
 
 routing:
-  - channel: telegram
+  - channel: tui-main
     peer: "*"
-    agent: my-agent
+    agent: admin
+  - channel: tg-main
+    peer: "*"
+    agent: admin
 ```
 
 ### 字段说明
 
 - `gateway.host` / `gateway.port`：HTTP gateway 监听地址
+- `xar`：xar daemon IPC 连接配置（v2 模式，省略则不连接 xar）
+- `plugins`：channel 插件注册表，key 为 type 名，value 为 npm 包名
 - `channels`：channel 实例列表，每个 channel 需有唯一 `id` 和 `type`
 - `agents`：注册的 agent，key 为 agent id，`inbox` 为 thread 目录路径
 - `routing`：路由规则，`channel` + `peer` → `agent`；`peer` 可用 `*` 匹配所有
+
+---
+
+## 插件管理
+
+xgw 通过插件支持不同的 channel 类型。TUI 插件内置，其他类型需要安装并注册。
+
+### 安装插件
+
+```bash
+# 1. 全局安装 npm 包
+npm install -g @theclawlab/xgw-plugin-telegram
+
+# 2. 注册到 xgw（写入 config.yaml 的 plugins 节）
+xgw plugin add telegram @theclawlab/xgw-plugin-telegram
+```
+
+### plugin add
+
+```bash
+xgw plugin add <type> <package>
+```
+
+将 `type → package` 写入 config.yaml 的 `plugins` 节。
+
+### plugin remove
+
+```bash
+xgw plugin remove <type>
+```
+
+### plugin list
+
+```bash
+xgw plugin list [--json]
+```
+
+### channel 级别覆盖
+
+在 channel 配置里指定 `plugin` 字段可覆盖全局注册（适合测试 beta 版本）：
+
+```yaml
+channels:
+  - id: tg-test
+    type: telegram
+    plugin: "@theclawlab/xgw-plugin-telegram-beta"
+```
+
+### 插件查找顺序
+
+1. channel 配置里的 `plugin` 字段（npm 包名）
+2. config.yaml 顶层 `plugins.<type>`（全局注册）
+3. xgw 内置 `plugins/<type>/`（开发 fallback，仅 tui）
 
 ---
 
@@ -76,8 +154,6 @@ xgw start --config /path/to/config.yaml
 
 ### stop
 
-停止 daemon（发送 SIGTERM，等待最多 5 秒）：
-
 ```bash
 xgw stop
 ```
@@ -90,27 +166,13 @@ xgw stop
 xgw reload
 ```
 
-daemon 未运行时静默成功，配置变更将在下次启动时生效。
+daemon 未运行时静默成功。
 
 ### status
-
-查看 daemon 状态：
 
 ```bash
 xgw status
 xgw status --json
-```
-
-JSON 输出示例：
-
-```json
-{
-  "running": true,
-  "pid": 12345,
-  "channels": [
-    { "id": "telegram", "type": "tui", "paired": true }
-  ]
-}
 ```
 
 ---
@@ -125,31 +187,12 @@ xgw channel add --id <id> --type <type> [--set key=value ...]
 
 `--set` 可传入任意额外字段，例如 `--set token=abc123`。
 
-### channel remove
+### channel remove / list / pair / health
 
 ```bash
 xgw channel remove --id <id>
-```
-
-### channel list
-
-```bash
 xgw channel list [--json]
-```
-
-### channel pair
-
-对 channel 进行配对（验证凭证、完成 webhook/polling 注册）：
-
-```bash
 xgw channel pair --id <id>
-```
-
-### channel health
-
-检查 channel 健康状态：
-
-```bash
 xgw channel health [--id <id>] [--json]
 ```
 
@@ -157,23 +200,9 @@ xgw channel health [--id <id>] [--json]
 
 ## Agent 管理
 
-### agent add
-
-注册一个 agent 的 inbox：
-
 ```bash
 xgw agent add --id <agent-id> --inbox <thread-path>
-```
-
-### agent remove
-
-```bash
 xgw agent remove --id <agent-id>
-```
-
-### agent list
-
-```bash
 xgw agent list [--json]
 ```
 
@@ -181,49 +210,23 @@ xgw agent list [--json]
 
 ## 路由管理
 
-### route add
-
-添加或更新路由规则（channel + peer → agent）：
-
 ```bash
 xgw route add --channel <id> --peer <peer-id> --agent <agent-id>
-```
-
-`--peer` 可用 `*` 匹配该 channel 的所有 peer。
-
-### route remove
-
-```bash
 xgw route remove --channel <id> --peer <peer-id>
-```
-
-### route list
-
-```bash
 xgw route list [--json]
 ```
 
+`--peer "*"` 匹配该 channel 的所有 peer。
+
 ---
 
-## 发送消息
+## 发送消息（诊断工具）
 
-通过指定 channel 向 peer 发送消息：
+`xgw send` 在 v2 中是诊断工具，正常消息路径由 xar 通过 IPC 直接 push 到 xgw。
 
 ```bash
 xgw send --channel <id> --peer <peer-id> --session <session-id> --message "hello"
-```
-
-从 stdin 读取消息内容：
-
-```bash
-echo "hello" | xgw send --channel telegram --peer user42 --session s1
-```
-
-回复指定消息：
-
-```bash
-xgw send --channel telegram --peer user42 --session s1 \
-  --message "got it" --reply-to <message-id>
+echo "hello" | xgw send --channel tui-main --peer alice --session alice
 ```
 
 ---
@@ -234,8 +237,6 @@ xgw send --channel telegram --peer user42 --session s1 \
 xgw config check [--config <path>]
 ```
 
-校验通过输出 `Config OK: <path>`，失败时打印所有错误并以退出码 1 退出。
-
 ---
 
 ## 退出码
@@ -245,14 +246,3 @@ xgw config check [--config <path>]
 | `0` | 成功 |
 | `1` | 运行时错误（daemon 未运行、channel 不存在等） |
 | `2` | 参数/用法错误（缺少必填参数、未知命令） |
-
----
-
-## 帮助
-
-```bash
-xgw --help
-xgw start --help
-xgw channel --help
-xgw --version
-```

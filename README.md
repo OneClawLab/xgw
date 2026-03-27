@@ -1,23 +1,15 @@
 # xgw
 
-A CLI tool and daemon that acts as a communication gateway between AI agents and external peers — routing inbound messages from channels (e.g. Telegram) to agent inboxes, and delivering outbound replies back to the right peer.
+Communication gateway daemon for TheClaw v2. Routes inbound messages from external channels (TUI, Telegram, etc.) to xar agent runtime via IPC, and delivers streaming replies back to peers.
 
 ## How it works
 
-- Configure channels (external messaging platforms), agents (inbox paths), and routing rules in a YAML config file.
-- Start the daemon with `xgw start` — it listens for inbound messages on each channel and routes them to the matching agent's inbox via `thread push`.
-- When an agent replies, `xgw send` delivers the message back to the peer on the correct channel.
+- Configure channels, agents, routing rules, and plugins in a YAML config file.
+- Start the daemon with `xgw start` — it connects to the xar daemon via IPC and starts listening on each channel.
+- Inbound messages are forwarded to xar over IPC; xar processes them and streams replies back through xgw to the channel.
 - Routing rules map `channel + peer → agent`; `peer: "*"` catches all peers on a channel.
 
 ## Install
-
-### From npm
-
-```bash
-npm install -g @theclawlab/xgw
-```
-
-### From source
 
 ```bash
 npm run build && npm link
@@ -26,36 +18,51 @@ npm run build && npm link
 ## Quick start
 
 ```bash
-# Start the daemon
-xgw start
+# 1. Create config
+mkdir -p ~/.config/xgw
+cat > ~/.config/xgw/config.yaml << 'EOF'
+gateway:
+  host: 127.0.0.1
+  port: 18790
 
-# Add a channel
-xgw channel add --id telegram --type tui
+xar:
+  port: 18792
 
-# Register an agent inbox
-xgw agent add --id my-agent --inbox ~/.theclaw/agents/my-agent/inbox
+channels:
+  - id: tui-main
+    type: tui
+    port: 18791
+    paired: true
+    pair_mode: ws
 
-# Add a routing rule (all telegram peers → my-agent)
-xgw route add --channel telegram --peer "*" --agent my-agent
+routing:
+  - channel: tui-main
+    peer: "*"
+    agent: admin
 
-# Check daemon status
-xgw status
+agents:
+  admin:
+    inbox: ~/.theclaw/agents/admin/inbox
+EOF
 
-# Send a message to a peer
-xgw send --channel telegram --peer user42 --session s1 --message "hello"
+# 2. Validate config
+xgw config check
 
-# Stop the daemon
-xgw stop
+# 3. Start daemon (after xar daemon is running)
+xgw start --foreground
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `xgw start` | Start the gateway daemon (background by default) |
+| `xgw start` | Start the gateway daemon |
 | `xgw stop` | Stop the daemon |
 | `xgw reload` | Hot-reload config (SIGUSR1) |
-| `xgw status` | Show daemon status and active channels |
+| `xgw status` | Show daemon status |
+| `xgw plugin add <type> <pkg>` | Register a channel plugin |
+| `xgw plugin remove <type>` | Unregister a plugin |
+| `xgw plugin list` | List registered plugins |
 | `xgw channel add` | Add a channel |
 | `xgw channel remove` | Remove a channel |
 | `xgw channel list` | List channels |
@@ -67,26 +74,23 @@ xgw stop
 | `xgw route add` | Add a routing rule |
 | `xgw route remove` | Remove a routing rule |
 | `xgw route list` | List routing rules |
-| `xgw send` | Send a message to a peer via a channel |
+| `xgw send` | Send a message to a peer (diagnostics) |
 | `xgw config check` | Validate the config file |
+
+## Installing channel plugins
+
+The TUI plugin is built-in. For other channels:
+
+```bash
+npm install -g @theclawlab/xgw-plugin-telegram
+xgw plugin add telegram @theclawlab/xgw-plugin-telegram
+```
 
 ## Data directory
 
-Default: `~/.local/share/xgw/` — override with `XGW_HOME`.  
-Config file default: `~/.config/xgw/config.yaml` — override with `XGW_CONFIG` or `--config`.
-
-```
-$XGW_HOME/
-├── logs/    # daemon logs
-└── xgw.pid  # daemon lock file
-```
-
-## Dependencies
-
-Requires the following tools to be installed and on `PATH`:
-
-- [`thread`](../thread) — event queue CLI (used to push messages into agent inboxes)
+Config: `~/.config/xgw/config.yaml` — override with `XGW_CONFIG` or `--config`.  
+Runtime: `~/.local/share/xgw/` — override with `XGW_HOME`.
 
 ## Documentation
 
-- [USAGE.md](./USAGE.md) — full CLI reference, config format, and routing details
+- [USAGE.md](./USAGE.md) — full CLI reference and config format

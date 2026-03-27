@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import yaml from 'js-yaml';
+import { homedir } from 'node:os';
 import { parseXarConfig } from '../../src/config.js';
 import type { XarConfig } from '../../src/xar/types.js';
 
@@ -49,9 +50,9 @@ describe('Property 8: XarConfig 默认值正确性', () => {
 
         const cfg = result.value;
 
-        // Missing socket → default ~/.theclaw/xar.sock
+        // Missing socket → default (expanded home path)
         if (!('socket' in raw)) {
-          expect(cfg.socket).toBe('~/.theclaw/xar.sock');
+          expect(cfg.socket).toBe(homedir() + '/.theclaw/xar.sock');
         } else {
           expect(cfg.socket).toBe(raw.socket);
         }
@@ -78,7 +79,7 @@ describe('Property 8: XarConfig 默认值正确性', () => {
     const result = parseXarConfig(null);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.socket).toBe('~/.theclaw/xar.sock');
+    expect(result.value.socket).toBe(homedir() + '/.theclaw/xar.sock');
     expect(result.value.port).toBe(18792);
     expect(result.value.reconnect_interval_ms).toBe(3000);
   });

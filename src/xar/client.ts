@@ -72,6 +72,14 @@ export class XarClient {
     if (this.closed) return;
     this.state = 'connecting';
 
+    // On Windows, Unix domain sockets are unreliable — go straight to TCP
+    if (process.platform === 'win32') {
+      const tcpUrl = `ws://127.0.0.1:${this.config.port}`;
+      const connected = await this._tryConnect(tcpUrl);
+      if (!connected) this._scheduleReconnect();
+      return;
+    }
+
     // Try Unix socket first, then TCP fallback
     const connected = await this._tryConnect(`ws+unix://${this.config.socket}`);
     if (!connected) {

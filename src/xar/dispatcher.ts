@@ -2,6 +2,8 @@ import type { Logger } from '../repo-utils/logger.js';
 import type { ChannelRegistry } from '../channels/registry.js';
 import type { XarOutboundEvent, SessionState } from './types.js';
 
+const TUI_FLUSH_INTERVAL_MS = 100;
+
 export class Dispatcher {
   private readonly registry: ChannelRegistry;
   private readonly logger: Logger;
@@ -24,8 +26,10 @@ export class Dispatcher {
           peerId: reply_context.peer_id,
           sessionId: session_id,
           tokenBuffer: [],
+          flushTimer: null,
         };
         this.sessions.set(session_id, state);
+        this.logger.info(`stream_start: session=${session_id} channel=${reply_context.channel_id} peer=${reply_context.peer_id}`);
         break;
       }
 
@@ -36,17 +40,14 @@ export class Dispatcher {
           this.logger.warn(`Dispatcher: stream_token for unknown session ${session_id}, discarding`);
           return;
         }
-        const plugin = this.registry.getPlugin(state.channelId);
-        if (!plugin) {
-          this.logger.warn(`Dispatcher: no plugin for channel ${state.channelId}, discarding stream_token`);
-          return;
-        }
+        state.tokenBuffer.push(token);
         if (state.channelType === 'tui') {
-          // TUI: send each token immediately
-          void plugin.send({ peer_id: state.peerId, session_id: state.sessionId, text: token });
-        } else {
-          // Non-TUI: accumulate tokens
-          state.tokenBuffer.push(token);
+          // TUI: schedule a batched flush if not already pending
+          if (state.flushTimer === null) {
+            state.flushTimer = setTimeout(() => {
+              this.flushTuiBuffer(state);
+            }, TUI_FLUSH_INTERVAL_MS);
+          }
         }
         break;
       }
@@ -58,25 +59,40 @@ export class Dispatcher {
           this.logger.warn(`Dispatcher: stream_end for unknown session ${session_id}, discarding`);
           return;
         }
-        if (state.channelType !== 'tui') {
+        if (state.channelType === 'tui') {
+          // Cancel pending timer and flush remaining tokens, then send stream_end
+          if (state.flushTimer !== null) {
+            clearTimeout(state.flushTimer);
+            state.flushTimer = null;
+          }
+          this.flushTuiBuffer(state);
+          const plugin = this.registry.getPlugin(state.channelId);
+          if (plugin) {
+            void plugin.send({ peer_id: state.peerId, session_id: state.sessionId, text: '', stream: 'end' });
+          }
+          this.logger.info(`stream_end: session=${session_id} channel=${state.channelId} peer=${state.peerId} (tui streaming complete)`);
+        } else {
           // Non-TUI: send the full accumulated text
           const plugin = this.registry.getPlugin(state.channelId);
           if (!plugin) {
             this.logger.warn(`Dispatcher: no plugin for channel ${state.channelId}, discarding stream_end`);
           } else {
             const fullText = state.tokenBuffer.join('');
+            this.logger.info(`stream_end: session=${session_id} channel=${state.channelId} peer=${state.peerId} chars=${fullText.length}`);
             void plugin.send({ peer_id: state.peerId, session_id: state.sessionId, text: fullText });
           }
         }
-        // Clean up session state
         this.sessions.delete(session_id);
         break;
       }
 
       case 'stream_error': {
         const { session_id, error } = event;
+        const state = this.sessions.get(session_id);
+        if (state?.flushTimer !== null && state?.flushTimer !== undefined) {
+          clearTimeout(state.flushTimer);
+        }
         this.logger.error(`Dispatcher: stream_error for session ${session_id}: ${error}`);
-        // Clean up session state
         this.sessions.delete(session_id);
         break;
       }
@@ -86,5 +102,18 @@ export class Dispatcher {
         break;
       }
     }
+  }
+
+  private flushTuiBuffer(state: SessionState): void {
+    state.flushTimer = null;
+    if (state.tokenBuffer.length === 0) return;
+    const text = state.tokenBuffer.join('');
+    state.tokenBuffer = [];
+    const plugin = this.registry.getPlugin(state.channelId);
+    if (!plugin) {
+      this.logger.warn(`Dispatcher: no plugin for channel ${state.channelId}, discarding tui chunk`);
+      return;
+    }
+    void plugin.send({ peer_id: state.peerId, session_id: state.sessionId, text, stream: 'chunk' });
   }
 }

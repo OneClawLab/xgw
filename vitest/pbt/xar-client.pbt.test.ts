@@ -156,11 +156,11 @@ describe('Property 1: 缓冲区溢出后保留最新消息', () => {
 
           // The retained messages must be the LAST 100 (indices n-100 .. n-1)
           const firstExpected = n - 100;
-          const firstParsed = JSON.parse(received[0]!) as { content: string };
-          expect(firstParsed.content).toBe(`msg-${firstExpected}`);
+          const firstParsed = JSON.parse(received[0]!) as { message: { content: string } };
+          expect(firstParsed.message.content).toBe(`msg-${firstExpected}`);
 
-          const lastParsed = JSON.parse(received[99]!) as { content: string };
-          expect(lastParsed.content).toBe(`msg-${n - 1}`);
+          const lastParsed = JSON.parse(received[99]!) as { message: { content: string } };
+          expect(lastParsed.message.content).toBe(`msg-${n - 1}`);
         }),
         { numRuns: 5 },
       );
@@ -208,8 +208,8 @@ describe('Property 2: 缓冲区恢复后 FIFO 顺序发送', () => {
 
           expect(received.length).toBe(contents.length);
           for (let i = 0; i < contents.length; i++) {
-            const parsed = JSON.parse(received[i]!) as { content: string };
-            expect(parsed.content).toBe(contents[i]);
+            const parsed = JSON.parse(received[i]!) as { message: { content: string } };
+            expect(parsed.message.content).toBe(contents[i]);
           }
         }),
         { numRuns: 5 },

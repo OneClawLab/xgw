@@ -24,6 +24,8 @@ export interface SendParams {
   session_id: string;
   text: string;
   reply_to?: string;
+  /** If set, plugin should send a streaming frame instead of a regular message */
+  stream?: 'chunk' | 'end';
 }
 
 export interface HealthResult {

@@ -13,6 +13,8 @@ type TuiFrame =
   | { type: 'hello_ack'; channel_id: string; peer_id: string }
   | { type: 'error'; code: string; message: string }
   | { type: 'message'; text: string }
+  | { type: 'stream_chunk'; text: string }
+  | { type: 'stream_end' }
   | { type: 'ping' }
   | { type: 'pong' };
 
@@ -36,6 +38,8 @@ function createClient(opts: ClientOptions): void {
   let pingTimer: ReturnType<typeof setInterval> | null = null;
   let ws: WebSocket | null = null;
   let intentionalClose = false;
+  /** Whether we're mid-stream (agent> prefix already printed, no newline yet) */
+  let inStream = false;
 
   function cleanup(): void {
     if (pingTimer) {
@@ -81,6 +85,20 @@ function createClient(opts: ClientOptions): void {
           break;
         case 'message':
           process.stdout.write(formatAgentMessage(frame.text) + '\n');
+          inStream = false;
+          break;
+        case 'stream_chunk':
+          if (!inStream) {
+            process.stdout.write('agent> ');
+            inStream = true;
+          }
+          process.stdout.write(frame.text);
+          break;
+        case 'stream_end':
+          if (inStream) {
+            process.stdout.write('\n');
+            inStream = false;
+          }
           break;
         case 'pong':
           // keepalive ack, nothing to do

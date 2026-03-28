@@ -1,5 +1,6 @@
 import type { ChannelConfig, ChannelPlugin } from './types.js';
 import type { Message, HealthResult } from '../types.js';
+import type { Logger } from '../repo-utils/logger.js';
 
 const REQUIRED_METHODS = ['pair', 'start', 'stop', 'send', 'health'] as const;
 
@@ -17,6 +18,19 @@ export class ChannelRegistry {
   private loaded = new Map<string, ChannelPlugin>();
   /** channel id → running plugin instance (started only) */
   private running = new Map<string, ChannelPlugin>();
+  private logger: Logger | null = null;
+
+  setLogger(logger: Logger): void {
+    this.logger = logger;
+  }
+
+  private log(level: 'info' | 'warn' | 'error', msg: string): void {
+    if (this.logger) {
+      this.logger[level](msg);
+    } else {
+      process.stderr.write(`[ChannelRegistry] ${msg}\n`);
+    }
+  }
 
   /**
    * Register a plugin type. Validates it implements the ChannelPlugin interface.
@@ -39,10 +53,11 @@ export class ChannelRegistry {
     for (const ch of channels) {
       const plugin = this.pluginTypes.get(ch.type);
       if (!plugin) {
-        console.error(`No plugin registered for channel type "${ch.type}" (channel: ${ch.id})`);
+        this.log('error', `No plugin registered for channel type "${ch.type}" (channel: ${ch.id})`);
         continue;
       }
       this.loaded.set(ch.id, plugin);
+      this.log('info', `plugin loaded for channel: id=${ch.id} type=${ch.type}`);
     }
   }
 
@@ -56,19 +71,23 @@ export class ChannelRegistry {
     onMessage: (msg: Message) => Promise<void>,
   ): Promise<void> {
     for (const ch of channels) {
-      if (!ch.paired) continue;
+      if (!ch.paired) {
+        this.log('info', `channel skipped (not paired): id=${ch.id} type=${ch.type}`);
+        continue;
+      }
 
       const plugin = this.loaded.get(ch.id);
       if (!plugin) {
-        console.error(`No loaded plugin for channel "${ch.id}", skipping start`);
+        this.log('error', `No loaded plugin for channel "${ch.id}", skipping start`);
         continue;
       }
 
       try {
         await plugin.start(ch, onMessage);
         this.running.set(ch.id, plugin);
+        this.log('info', `channel started: id=${ch.id} type=${ch.type}`);
       } catch (err) {
-        console.error(
+        this.log('error',
           `Failed to start channel "${ch.id}": ${err instanceof Error ? err.message : String(err)}`,
         );
       }
@@ -83,8 +102,9 @@ export class ChannelRegistry {
     for (const [id, plugin] of this.running) {
       try {
         await plugin.stop();
+        this.log('info', `channel stopped: id=${id}`);
       } catch (err) {
-        console.error(
+        this.log('error',
           `Failed to stop channel "${id}": ${err instanceof Error ? err.message : String(err)}`,
         );
       }

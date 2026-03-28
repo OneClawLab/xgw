@@ -123,7 +123,7 @@ describe('XarClient — Unix socket priority / TCP fallback', () => {
     expect(received).toHaveLength(1);
     const parsed = JSON.parse(received[0]!);
     expect(parsed.type).toBe('inbound_message');
-    expect(parsed.content).toBe('hello');
+    expect(parsed.message.content).toBe('hello');
 
     client.close();
     await closeWsServer(server);
@@ -167,10 +167,10 @@ describe('XarClient — buffer overflow: drop oldest (req 1.5)', () => {
     expect(received).toHaveLength(100);
     // First received should be msg-10 (oldest 10 were dropped)
     const first = JSON.parse(received[0]!);
-    expect(first.content).toBe('msg-10');
+    expect(first.message.content).toBe('msg-10');
     // Last received should be msg-109
     const last = JSON.parse(received[99]!);
-    expect(last.content).toBe('msg-109');
+    expect(last.message.content).toBe('msg-109');
 
     client2.close();
     await closeWsServer(server);
@@ -196,7 +196,7 @@ describe('XarClient — FIFO flush after reconnect (req 1.6)', () => {
     expect(received).toHaveLength(5);
     for (let i = 0; i < 5; i++) {
       const parsed = JSON.parse(received[i]!);
-      expect(parsed.content).toBe(`queued-${i}`);
+      expect(parsed.message.content).toBe(`queued-${i}`);
     }
 
     client.close();
@@ -225,7 +225,7 @@ describe('XarClient — FIFO flush after reconnect (req 1.6)', () => {
     expect(received).toHaveLength(3);
     for (let i = 0; i < 3; i++) {
       const parsed = JSON.parse(received[i]!);
-      expect(parsed.content).toBe(`reconnect-${i}`);
+      expect(parsed.message.content).toBe(`reconnect-${i}`);
     }
 
     client.close();

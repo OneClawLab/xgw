@@ -217,6 +217,7 @@ export async function startCommand(opts: { config?: string; foreground: boolean 
   }
 
   // 5. Load plugins from config (maps channel ids to plugin instances)
+  registry.setLogger(logger);
   registry.loadPlugins(config.channels);
 
   // 6. Create XarClient if xar config is present

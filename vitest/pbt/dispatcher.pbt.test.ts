@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fc from 'fast-check';
 import { Dispatcher } from '../../src/xar/dispatcher.js';
 import type { ChannelRegistry } from '../../src/channels/registry.js';
@@ -86,6 +86,9 @@ function streamEnd(session_id: string): XarOutboundEvent {
 // **Validates: Requirements 3.1、3.5**
 
 describe('Property 5: stream_token 路由到正确 plugin', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
   it(
     '任意 stream_start 建立的会话，stream_token 只路由到对应 channel_id 的 plugin',
     () => {
@@ -112,6 +115,9 @@ describe('Property 5: stream_token 路由到正确 plugin', () => {
             dispatcher.handle(streamStart(sessionId, ctx));
             dispatcher.handle(streamToken(sessionId, token));
 
+            // Flush the timer so the batch is sent
+            vi.runAllTimers();
+
             // The token must be routed to the plugin for channelId
             expect(targetPlugin.send).toHaveBeenCalledOnce();
             // The other plugin must NOT be called
@@ -124,13 +130,16 @@ describe('Property 5: stream_token 路由到正确 plugin', () => {
   );
 });
 
-// ── Property 6: TUI 渠道每个 token 立即发送 ───────────────────────────────────
-// Feature: xgw-xar-ipc, Property 6: TUI 渠道每个 token 立即发送
+// ── Property 6: TUI 渠道 token 批量发送 ───────────────────────────────────────
+// Feature: xgw-xar-ipc, Property 6: TUI 渠道 token 批量发送
 // **Validates: Requirements 4.1**
 
-describe('Property 6: TUI 渠道每个 token 立即发送', () => {
+describe('Property 6: TUI 渠道 token 批量发送', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
   it(
-    '任意 TUI 会话中 N 个 stream_token，plugin.send 恰好被调用 N 次，每次 text 等于对应 token',
+    '任意 TUI 会话中 N 个 stream_token，timer flush 后 plugin.send 恰好被调用一次，text 等于所有 token 拼接',
     () => {
       fc.assert(
         fc.property(
@@ -151,14 +160,17 @@ describe('Property 6: TUI 渠道每个 token 立即发送', () => {
               dispatcher.handle(streamToken(sessionId, token));
             }
 
-            // plugin.send must be called exactly N times
-            expect(plugin.send).toHaveBeenCalledTimes(tokens.length);
+            // Before timer fires, no send yet
+            expect(plugin.send).not.toHaveBeenCalled();
 
-            // Each call must carry the corresponding token text
-            const calls = plugin.send.mock.calls as Array<[{ peer_id: string; session_id: string; text: string }]>;
-            for (let i = 0; i < tokens.length; i++) {
-              expect(calls[i]![0].text).toBe(tokens[i]);
-            }
+            // After timer fires, exactly one batched send
+            vi.runAllTimers();
+            expect(plugin.send).toHaveBeenCalledOnce();
+
+            const calls = plugin.send.mock.calls as Array<[{ peer_id: string; session_id: string; text: string; stream: string }]>;
+            const expectedText = tokens.join('');
+            expect(calls[0]![0].text).toBe(expectedText);
+            expect(calls[0]![0].stream).toBe('chunk');
           },
         ),
         { numRuns: 100 },

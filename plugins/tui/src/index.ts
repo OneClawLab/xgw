@@ -28,6 +28,7 @@ export interface SendParams {
   session_id: string;
   text: string;
   reply_to?: string;
+  stream?: 'chunk' | 'end';
 }
 
 export interface HealthResult {
@@ -86,11 +87,14 @@ export class TuiPlugin {
       let peerId: string | null = null;
       let handshakeComplete = false;
 
+      process.stderr.write(`[tui-plugin] new ws connection on channel=${this.channelId}\n`);
+
       ws.on('message', (data) => {
         let frame: Record<string, unknown>;
         try {
           frame = JSON.parse(String(data)) as Record<string, unknown>;
         } catch {
+          process.stderr.write(`[tui-plugin] bad JSON from peer=${peerId ?? 'unknown'}\n`);
           ws.send(
             JSON.stringify({
               type: 'error',
@@ -103,6 +107,7 @@ export class TuiPlugin {
         }
 
         const frameType = frame['type'];
+        process.stderr.write(`[tui-plugin] frame type=${String(frameType)} peer=${peerId ?? 'unknown'} handshake=${handshakeComplete}\n`);
 
         // ── Handshake ──
         if (!handshakeComplete) {
@@ -137,6 +142,7 @@ export class TuiPlugin {
           }
 
           if (helloChannelId !== this.channelId) {
+            process.stderr.write(`[tui-plugin] channel mismatch: got=${helloChannelId} expected=${this.channelId}\n`);
             ws.send(
               JSON.stringify({
                 type: 'error',
@@ -151,6 +157,7 @@ export class TuiPlugin {
           peerId = helloPeerId;
           handshakeComplete = true;
           this.peers.set(peerId, ws);
+          process.stderr.write(`[tui-plugin] handshake ok: channel=${this.channelId} peer=${peerId}\n`);
           ws.send(
             JSON.stringify({
               type: 'hello_ack',
@@ -172,6 +179,7 @@ export class TuiPlugin {
           typeof frame['text'] === 'string' &&
           peerId
         ) {
+          process.stderr.write(`[tui-plugin] inbound message: peer=${peerId} text=${String(frame['text']).slice(0, 80)}\n`);
           const msg: Message = {
             id: randomUUID(),
             channel_id: this.channelId,
@@ -189,12 +197,14 @@ export class TuiPlugin {
       });
 
       ws.on('close', () => {
+        process.stderr.write(`[tui-plugin] peer disconnected: peer=${peerId ?? 'unknown'}\n`);
         if (peerId) {
           this.peers.delete(peerId);
         }
       });
 
-      ws.on('error', () => {
+      ws.on('error', (err) => {
+        process.stderr.write(`[tui-plugin] ws error: peer=${peerId ?? 'unknown'} err=${err.message}\n`);
         if (peerId) {
           this.peers.delete(peerId);
         }
@@ -227,7 +237,13 @@ export class TuiPlugin {
     if (!ws) {
       throw new Error(`Peer ${params.peer_id} not connected`);
     }
-    ws.send(JSON.stringify({ type: 'message', text: params.text }));
+    if (params.stream === 'chunk') {
+      ws.send(JSON.stringify({ type: 'stream_chunk', text: params.text }));
+    } else if (params.stream === 'end') {
+      ws.send(JSON.stringify({ type: 'stream_end' }));
+    } else {
+      ws.send(JSON.stringify({ type: 'message', text: params.text }));
+    }
   }
 
   async health(): Promise<HealthResult> {

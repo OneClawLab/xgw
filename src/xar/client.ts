@@ -186,7 +186,7 @@ export class XarClient {
     const payload = JSON.stringify({
       type: 'inbound_message',
       agent_id: envelope.agentId,
-      ...envelope.message,
+      message: envelope.message,
     });
     this.ws.send(payload);
   }

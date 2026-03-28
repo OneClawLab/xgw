@@ -84,11 +84,11 @@ describe('ChannelRegistry.loadPlugins', () => {
 
   it('skips channels with unregistered type (logs error, no throw)', () => {
     const reg = new ChannelRegistry();
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     reg.loadPlugins([makeConfig('ch1', 'unknown')]);
     expect(reg.getPlugin('ch1')).toBeUndefined();
-    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('unknown'));
-    errSpy.mockRestore();
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('unknown'));
+    stderrSpy.mockRestore();
   });
 
   it('returns undefined for channel not in loaded set', () => {

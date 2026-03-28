@@ -47,6 +47,8 @@ export interface SessionState {
   channelType: string;
   peerId: string;
   sessionId: string;
-  /** Accumulated tokens for non-TUI channels */
+  /** Accumulated tokens (non-TUI: full message; TUI: pending batch) */
   tokenBuffer: string[];
+  /** TUI only: pending flush timer handle */
+  flushTimer: ReturnType<typeof setTimeout> | null;
 }

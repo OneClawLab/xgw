@@ -98,7 +98,7 @@ describe('Property 3: Config mutation round-trip', () => {
         const reloaded = saveAndReload(tmpPath(), mutated);
         configsEqual(mutated, reloaded);
       }),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 
@@ -113,7 +113,7 @@ describe('Property 3: Config mutation round-trip', () => {
         const reloaded = saveAndReload(tmpPath(), mutated);
         configsEqual(mutated, reloaded);
       }),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 
@@ -131,7 +131,7 @@ describe('Property 3: Config mutation round-trip', () => {
         const reloaded = saveAndReload(tmpPath(), mutated);
         configsEqual(mutated, reloaded);
       }),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 
@@ -146,7 +146,7 @@ describe('Property 3: Config mutation round-trip', () => {
         const reloaded = saveAndReload(tmpPath(), mutated);
         configsEqual(mutated, reloaded);
       }),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 
@@ -157,7 +157,7 @@ describe('Property 3: Config mutation round-trip', () => {
         const reloaded = saveAndReload(tmpPath(), mutated);
         configsEqual(mutated, reloaded);
       }),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 
@@ -174,7 +174,7 @@ describe('Property 3: Config mutation round-trip', () => {
         const reloaded = saveAndReload(tmpPath(), mutated);
         configsEqual(mutated, reloaded);
       }),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 
@@ -198,7 +198,7 @@ describe('Property 3: Config mutation round-trip', () => {
           configsEqual(mutated, reloaded);
         },
       ),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 });

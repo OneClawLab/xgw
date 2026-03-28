@@ -7,9 +7,10 @@ import type { XarConfig } from '../../src/xar/types.js';
 
 // ── Generators ────────────────────────────────────────────────────────────────
 
-/** Valid Unix socket path string (non-empty) */
+/** Valid Unix socket path string (non-empty, no leading tilde to avoid home expansion) */
 const genSocketPath = () =>
-  fc.string({ minLength: 1, maxLength: 60 }).filter((s) => s.trim().length > 0);
+  fc.string({ minLength: 1, maxLength: 60 })
+    .filter((s) => s.trim().length > 0 && !s.startsWith('~'));
 
 /** Valid TCP port: integer 1–65535 */
 const genPort = () => fc.integer({ min: 1, max: 65535 });

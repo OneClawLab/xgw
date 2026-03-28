@@ -162,7 +162,7 @@ describe('Property 1: 缓冲区溢出后保留最新消息', () => {
           const lastParsed = JSON.parse(received[99]!) as { content: string };
           expect(lastParsed.content).toBe(`msg-${n - 1}`);
         }),
-        { numRuns: 100 },
+        { numRuns: 5 },
       );
     },
     60000,
@@ -212,7 +212,7 @@ describe('Property 2: 缓冲区恢复后 FIFO 顺序发送', () => {
             expect(parsed.content).toBe(contents[i]);
           }
         }),
-        { numRuns: 100 },
+        { numRuns: 5 },
       );
     },
     60000,

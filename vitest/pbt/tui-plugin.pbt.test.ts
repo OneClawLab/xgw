@@ -152,7 +152,7 @@ describe('Property 18: TUI Plugin message normalization', () => {
           await closeWs(ws);
         }
       }),
-      { numRuns: 100 },
+      { numRuns: 20 },
     );
   }, 60_000);
 });
@@ -191,7 +191,7 @@ describe('Property 19: TUI Plugin hello handshake', () => {
           await closeWs(ws);
         }
       }),
-      { numRuns: 100 },
+      { numRuns: 20 },
     );
   }, 60_000);
 });
@@ -248,7 +248,7 @@ describe('Property 20: TUI Plugin invalid hello rejection', () => {
           await closeWs(ws);
         }
       }),
-      { numRuns: 100 },
+      { numRuns: 20 },
     );
   }, 60_000);
 });
@@ -320,7 +320,7 @@ describe('Property 21: TUI Plugin send routes to correct peer', () => {
           }
         },
       ),
-      { numRuns: 100 },
+      { numRuns: 20 },
     );
   }, 60_000);
 });

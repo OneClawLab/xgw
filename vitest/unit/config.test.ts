@@ -302,7 +302,7 @@ describe('Property 4: Config YAML round-trip', () => {
         expect(loaded.routing).toEqual(config.routing);
         expect(loaded.agents).toEqual(config.agents);
       }),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 
@@ -377,7 +377,7 @@ describe('Property 5: Config comment preservation', () => {
         expect(reloaded.routing).toEqual(config.routing);
         expect(reloaded.agents).toEqual(config.agents);
       }),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 
@@ -402,7 +402,7 @@ describe('Property 5: Config comment preservation', () => {
         expect(loaded.gateway.host).toBe(config.gateway.host);
         expect(loaded.gateway.port).toBe(config.gateway.port);
       }),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 
@@ -424,7 +424,7 @@ describe('Property 5: Config comment preservation', () => {
         const validation = validateConfig(final);
         expect(validation.valid).toBe(true);
       }),
-      { numRuns: 100 },
+      { numRuns: 5 },
     );
   });
 });

@@ -10,6 +10,7 @@
     "dev": "tsup --watch",
     "build": "tsup",
     "test": "vitest",
+    "test:coverage": "vitest run --coverage",
     "release:local": "npm run build && npm link",
     "release:public": "npm test && npm run build && npm publish --access public",
     "release:public:skip-test": "npm run build && npm publish --access public"
@@ -28,6 +29,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.4.0",
     "@types/ws": "^8.18.0",
+    "@vitest/coverage-v8": "^4.1.2",
     "fast-check": "^4.6.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",

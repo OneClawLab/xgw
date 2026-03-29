@@ -19,12 +19,15 @@ export function createClient(opts: FeishuClientOptions): Lark.Client {
     appId: opts.appId,
     appSecret: opts.appSecret,
     domain: resolveDomain(opts.domain),
+    loggerLevel: Lark.LoggerLevel.warn,
   });
 }
 
 /** Create a Feishu EventDispatcher (no encryptKey/verificationToken needed for WS mode). */
 export function createDispatcher(): Lark.EventDispatcher {
-  return new Lark.EventDispatcher({});
+  return new Lark.EventDispatcher({
+    loggerLevel: Lark.LoggerLevel.warn,
+  });
 }
 
 /** Create a Feishu WebSocket Client. */
@@ -36,6 +39,7 @@ export function createWSClient(
     appId: opts.appId,
     appSecret: opts.appSecret,
     domain: resolveDomain(opts.domain),
+    loggerLevel: Lark.LoggerLevel.warn,
   });
   // Store dispatcher reference for use in start()
   // WSClient.start({ eventDispatcher }) is called externally

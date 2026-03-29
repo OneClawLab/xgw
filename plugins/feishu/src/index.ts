@@ -97,6 +97,11 @@ import {
 import { checkBotMentioned, toMessage } from './event-handler.js';
 import { StreamingBuffer } from './streaming.js';
 
+/** Infer receive_id_type from the id prefix: ou_ → open_id, oc_ → chat_id */
+function receiveIdType(id: string): 'open_id' | 'chat_id' {
+  return id.startsWith('oc_') ? 'chat_id' : 'open_id';
+}
+
 function parseConfig(config: ChannelConfig): FeishuPluginConfig {
   return {
     appId: typeof config['appId'] === 'string' ? config['appId'] : '',
@@ -111,6 +116,7 @@ function parseConfig(config: ChannelConfig): FeishuPluginConfig {
 
 export class FeishuPlugin {
   readonly type = 'feishu';
+  readonly streaming = true;
 
   private client: Lark.Client | null = null;
   private wsClient: Lark.WSClient | null = null;
@@ -178,30 +184,6 @@ export class FeishuPlugin {
       },
     });
 
-    // Set up streaming buffer
-    this.streamingBuffer = new StreamingBuffer({
-      coalesceMs: pluginConfig.streamingCoalesceMs,
-      sendMessage: async (sessionId: string, text: string): Promise<string> => {
-        const resp = await client.im.v1.message.create({
-          params: { receive_id_type: 'chat_id' },
-          data: {
-            receive_id: sessionId,
-            msg_type: 'text',
-            content: JSON.stringify({ text }),
-          },
-        });
-        return resp.data?.message_id ?? '';
-      },
-      editMessage: async (messageId: string, text: string): Promise<void> => {
-        await client.im.v1.message.patch({
-          path: { message_id: messageId },
-          data: {
-            content: JSON.stringify({ text }),
-          },
-        });
-      },
-    });
-
     // Start WSClient
     const wsClient = createWSClient(pluginConfig, dispatcher);
     this.wsClient = wsClient;
@@ -236,25 +218,38 @@ export class FeishuPlugin {
       throw new Error('FeishuPlugin: not started');
     }
 
-    // Streaming: delegate to StreamingBuffer
+    // session_id from xar is prefixed as "<channel_id>:<peer_id>", extract the peer part
+    const receiveId = params.session_id.includes(':')
+      ? params.session_id.slice(params.session_id.indexOf(':') + 1)
+      : params.session_id;
+
+    // Streaming: feishu does not support message editing for text messages,
+    // so we ignore intermediate chunks and send the final text on stream end.
     if (params.stream === 'chunk') {
-      await this.streamingBuffer?.handleChunk(params.session_id, params.text);
-      return;
+      return; // discard intermediate chunks
     }
 
     if (params.stream === 'end') {
-      await this.streamingBuffer?.handleEnd(params.session_id, params.text);
+      // Send the complete accumulated text as a plain message
+      await this.client.im.v1.message.create({
+        params: { receive_id_type: receiveIdType(receiveId) },
+        data: {
+          receive_id: receiveId,
+          msg_type: 'text',
+          content: JSON.stringify({ text: params.text }),
+        },
+      });
       return;
     }
 
-    // Progress: send a status message then edit it
+    // Progress: send a status message
     if (params.progress !== undefined) {
       const statusText =
         params.progress === 'thinking' ? '🤔 思考中...' : params.text;
       await this.client.im.v1.message.create({
-        params: { receive_id_type: 'chat_id' },
+        params: { receive_id_type: receiveIdType(receiveId) },
         data: {
-          receive_id: params.session_id,
+          receive_id: receiveId,
           msg_type: 'text',
           content: JSON.stringify({ text: statusText }),
         },
@@ -264,9 +259,9 @@ export class FeishuPlugin {
 
     // Plain text message
     await this.client.im.v1.message.create({
-      params: { receive_id_type: 'chat_id' },
+      params: { receive_id_type: receiveIdType(receiveId) },
       data: {
-        receive_id: params.session_id,
+        receive_id: receiveId,
         msg_type: 'text',
         content: JSON.stringify({ text: params.text }),
       },
@@ -280,3 +275,5 @@ export class FeishuPlugin {
     return { ok: false, detail: 'WSClient not connected' };
   }
 }
+
+export default FeishuPlugin;

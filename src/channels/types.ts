@@ -12,6 +12,8 @@ export interface ChannelConfig {
 
 export interface ChannelPlugin {
   readonly type: string;
+  /** If true, dispatcher sends stream chunks progressively instead of buffering until stream_end */
+  readonly streaming?: boolean;
   pair(config: ChannelConfig): Promise<PairResult>;
   start(config: ChannelConfig, onMessage: (msg: Message) => Promise<void>): Promise<void>;
   stop(): Promise<void>;

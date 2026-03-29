@@ -73,6 +73,7 @@ const noopLogger: TuiLogger = {
 
 export class TuiPlugin {
   readonly type = 'tui';
+  readonly streaming = true;
 
   private wss: WebSocketServer | null = null;
   private channelId = '';

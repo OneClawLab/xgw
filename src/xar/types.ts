@@ -67,8 +67,12 @@ export interface SessionState {
   channelType: string;
   peerId: string;
   sessionId: string;
-  /** Accumulated tokens (non-TUI: full message; TUI: pending batch) */
+  /** Whether the plugin supports streaming (chunk-by-chunk) delivery */
+  streaming: boolean;
+  /** Accumulated tokens (non-TUI: full message; TUI/streaming: pending batch) */
   tokenBuffer: string[];
   /** TUI only: pending flush timer handle */
   flushTimer: ReturnType<typeof setTimeout> | null;
+  /** Timeout handle for stream_end watchdog */
+  watchdogTimer: ReturnType<typeof setTimeout> | null;
 }

@@ -39,8 +39,13 @@ export class GatewayServer {
     if (this.xarClient) {
       this.dispatcher = new Dispatcher(registry, this.logger);
       const dispatcher = this.dispatcher;
+      const logger = this.logger;
       this.xarClient.onOutbound((event) => {
-        dispatcher.handle(event);
+        try {
+          dispatcher.handle(event);
+        } catch (err) {
+          logger.error(`Dispatcher error handling event type=${event.type}: ${err instanceof Error ? err.message : String(err)}`);
+        }
       });
       await this.xarClient.connect();
     }

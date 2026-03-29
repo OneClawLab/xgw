@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { WebSocket } from 'ws';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
-import { formatAgentMessage, computeBackoffMs, formatConnectionStatus, MAX_RECONNECT_ATTEMPTS } from './helpers.js';
+import { computeBackoffMs, MAX_RECONNECT_ATTEMPTS } from './helpers.js';
 
 // Re-export helpers for backwards compatibility
 export { formatAgentMessage, computeBackoffMs, formatConnectionStatus } from './helpers.js';
@@ -15,10 +15,80 @@ type TuiFrame =
   | { type: 'message'; text: string }
   | { type: 'stream_chunk'; text: string }
   | { type: 'stream_end' }
+  | { type: 'progress'; kind: 'thinking' | 'tool_call' | 'tool_result'; text: string }
   | { type: 'ping' }
   | { type: 'pong' };
 
-// ── Core client logic ──
+// ── Progress rendering (mirrors xar chat) ────────────────────────────────────
+
+const INDENT = '    ';
+const LINE_MAX = 120;
+const MULTILINE_MAX_LINES = 5;
+
+function truncate(s: string, maxLen: number): string {
+  if (s.length <= maxLen) return s;
+  return s.slice(0, maxLen) + `…(${s.length - maxLen} chars)`;
+}
+
+function renderInlineOrBlock(prefix: string, text: string, indent: string): string {
+  const lines = text.split('\n').map(l => l.trimEnd()).filter(l => l.length > 0);
+  if (lines.length <= 1) {
+    const line = lines[0] ?? '';
+    const display = line.length > LINE_MAX ? line.slice(0, LINE_MAX) + `…(${line.length - LINE_MAX} chars)` : line;
+    return `${prefix} ${display}\n`;
+  }
+  const shown = lines.slice(0, MULTILINE_MAX_LINES);
+  const omitted = lines.length - MULTILINE_MAX_LINES;
+  const body = shown.map(l => `${indent}${l.length > LINE_MAX ? l.slice(0, LINE_MAX) + `…(${l.length - LINE_MAX} chars)` : l}`);
+  return `${prefix}\n${body.join('\n')}${omitted > 0 ? `\n${indent}…(${omitted} lines)` : ''}\n`;
+}
+
+function renderToolCall(data: unknown): void {
+  if (typeof data !== 'object' || data === null) {
+    process.stderr.write(`  tool_call: ${JSON.stringify(data)}\n`);
+    return;
+  }
+  const d = data as Record<string, unknown>;
+  const name = typeof d['name'] === 'string' ? d['name'] : 'unknown';
+  if (name !== 'bash_exec') {
+    process.stderr.write(`  tool_call: ${name}(${JSON.stringify(d['arguments'] ?? {})})\n`);
+    return;
+  }
+  const args = (typeof d['arguments'] === 'object' && d['arguments'] !== null)
+    ? d['arguments'] as Record<string, unknown>
+    : {};
+  const comment = typeof args['comment'] === 'string' ? args['comment'].trim() : '';
+  const command = typeof args['command'] === 'string' ? args['command'].trim() : '';
+  const cwd = typeof args['cwd'] === 'string' ? args['cwd'] : '';
+  const timeout = args['timeout_seconds'] !== undefined ? String(args['timeout_seconds']) : '';
+
+  process.stderr.write(`  ▶ ${comment || 'bash_exec'}\n`);
+  if (command) process.stderr.write(renderInlineOrBlock(`${INDENT}command:`, command, `${INDENT}  `));
+  const meta: string[] = [];
+  if (cwd) meta.push(`cwd: ${cwd}`);
+  if (timeout) meta.push(`timeout: ${timeout}s`);
+  if (meta.length > 0) process.stderr.write(`${INDENT}${meta.join('  ')}\n`);
+}
+
+function renderToolResult(data: unknown): void {
+  if (typeof data !== 'object' || data === null) {
+    process.stderr.write(`  ✓ ${truncate(JSON.stringify(data), LINE_MAX)}\n`);
+    return;
+  }
+  const d = data as Record<string, unknown>;
+  const exitCode = d['exitCode'] !== undefined ? d['exitCode'] : d['exit_code'];
+  const stdout = typeof d['stdout'] === 'string' ? d['stdout'] : '';
+  const stderr = typeof d['stderr'] === 'string' ? d['stderr'] : '';
+  const errMsg = typeof d['error'] === 'string' ? d['error'] : '';
+  const isSuccess = exitCode === 0 || exitCode === undefined;
+  const content = errMsg || [stdout, stderr].filter(s => s.trim()).join('\n').trim();
+  const prefix = `  ${isSuccess ? '✓' : '✗'}`;
+  if (!content) { process.stderr.write(`${prefix} (no output)\n`); return; }
+  process.stderr.write(renderInlineOrBlock(prefix, content, INDENT));
+}
+
+// ── Core client logic ─────────────────────────────────────────────────────────
+
 const PING_INTERVAL_MS = 30_000;
 
 interface ClientOptions {
@@ -38,18 +108,17 @@ function createClient(opts: ClientOptions): void {
   let pingTimer: ReturnType<typeof setInterval> | null = null;
   let ws: WebSocket | null = null;
   let intentionalClose = false;
-  /** Whether we're mid-stream (agent> prefix already printed, no newline yet) */
   let inStream = false;
+  let streamHeaderPrinted = false;
+  let processing = false;
 
   function cleanup(): void {
-    if (pingTimer) {
-      clearInterval(pingTimer);
-      pingTimer = null;
-    }
-    if (rl) {
-      rl.close();
-      rl = null;
-    }
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    if (rl) { rl.close(); rl = null; }
+  }
+
+  function showPrompt(): void {
+    if (rl) { rl.setPrompt('Q: '); rl.prompt(); }
   }
 
   function connect(): void {
@@ -57,52 +126,62 @@ function createClient(opts: ClientOptions): void {
     ws = new WebSocket(url);
 
     ws.on('open', () => {
-      const hello: TuiFrame = {
-        type: 'hello',
-        channel_id: opts.channel,
-        peer_id: opts.peer,
-      };
-      ws!.send(JSON.stringify(hello));
+      ws!.send(JSON.stringify({ type: 'hello', channel_id: opts.channel, peer_id: opts.peer } satisfies TuiFrame));
     });
 
     ws.on('message', (data) => {
       let frame: TuiFrame;
-      try {
-        frame = JSON.parse(String(data)) as TuiFrame;
-      } catch {
-        return;
-      }
+      try { frame = JSON.parse(String(data)) as TuiFrame; } catch { return; }
 
       switch (frame.type) {
         case 'hello_ack':
           onConnected();
           break;
+
         case 'error':
           process.stderr.write(`Error: ${frame.message}\n`);
           intentionalClose = true;
           ws?.close();
           process.exit(1);
           break;
-        case 'message':
-          process.stdout.write(formatAgentMessage(frame.text) + '\n');
-          inStream = false;
+
+        case 'progress':
+          if (frame.kind === 'thinking') {
+            // thinking delta — ignore (same as xar chat)
+          } else if (frame.kind === 'tool_call') {
+            try { renderToolCall(JSON.parse(frame.text)); } catch { process.stderr.write(`  tool_call: ${frame.text}\n`); }
+          } else if (frame.kind === 'tool_result') {
+            try { renderToolResult(JSON.parse(frame.text)); } catch { process.stderr.write(`  tool_result: ${frame.text}\n`); }
+          }
           break;
+
+        case 'message':
+          process.stderr.write('\n');
+          process.stdout.write(`\nA:\n${frame.text}\n\n`);
+          processing = false;
+          showPrompt();
+          break;
+
         case 'stream_chunk':
-          if (!inStream) {
-            process.stdout.write('agent> ');
+          if (!streamHeaderPrinted) {
+            process.stderr.write('\n');
+            process.stdout.write('\nA:\n');
+            streamHeaderPrinted = true;
             inStream = true;
           }
           process.stdout.write(frame.text);
           break;
+
         case 'stream_end':
-          if (inStream) {
-            process.stdout.write('\n');
-            inStream = false;
-          }
+          if (inStream) { process.stdout.write('\n\n'); inStream = false; }
+          streamHeaderPrinted = false;
+          processing = false;
+          showPrompt();
           break;
+
         case 'pong':
-          // keepalive ack, nothing to do
           break;
+
         default:
           break;
       }
@@ -114,46 +193,48 @@ function createClient(opts: ClientOptions): void {
       attemptReconnect();
     });
 
-    ws.on('error', () => {
-      // 'close' event will fire after this, reconnect handled there
-    });
+    ws.on('error', () => { /* close fires after */ });
   }
 
   function onConnected(): void {
     reconnectAttempt = 0;
-    process.stdout.write(formatConnectionStatus(opts.channel, opts.peer) + '\n');
+    process.stdout.write(`Chatting with channel '${opts.channel}' as '${opts.peer}' (Ctrl+C or Ctrl+D to exit)\n\n`);
 
-    // Start ping keepalive
     pingTimer = setInterval(() => {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping' } satisfies TuiFrame));
       }
     }, PING_INTERVAL_MS);
 
-    // Start readline loop
-    rl = createInterface({ input: process.stdin, output: process.stdout, prompt: '' });
+    rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: process.stdin.isTTY,
+      prompt: 'Q: ',
+    });
 
     rl.on('line', (line) => {
       const trimmed = line.trim();
       if (trimmed === '/quit') {
-        intentionalClose = true;
-        ws?.close();
-        cleanup();
-        process.exit(0);
+        intentionalClose = true; ws?.close(); cleanup();
+        process.stdout.write('\n'); process.exit(0);
       }
-      if (ws && ws.readyState === WebSocket.OPEN && trimmed.length > 0) {
-        const msg: TuiFrame = { type: 'message', text: trimmed };
-        ws.send(JSON.stringify(msg));
+      if (!trimmed || processing) return;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        processing = true;
+        streamHeaderPrinted = false;
+        inStream = false;
+        process.stderr.write('\n--- working...\n');
+        ws.send(JSON.stringify({ type: 'message', text: trimmed } satisfies TuiFrame));
       }
     });
 
     rl.on('close', () => {
-      // Ctrl+C or EOF
-      intentionalClose = true;
-      ws?.close();
-      cleanup();
-      process.exit(0);
+      intentionalClose = true; ws?.close(); cleanup();
+      process.stdout.write('\n'); process.exit(0);
     });
+
+    showPrompt();
   }
 
   function attemptReconnect(): void {
@@ -167,18 +248,15 @@ function createClient(opts: ClientOptions): void {
     setTimeout(connect, delayMs);
   }
 
-  // Handle Ctrl+C globally
   process.on('SIGINT', () => {
-    intentionalClose = true;
-    ws?.close();
-    cleanup();
-    process.exit(0);
+    intentionalClose = true; ws?.close(); cleanup();
+    process.stdout.write('\n'); process.exit(0);
   });
 
   connect();
 }
 
-// ── CLI ──
+// ── CLI ───────────────────────────────────────────────────────────────────────
 
 const program = new Command();
 
@@ -195,12 +273,7 @@ program
       process.stderr.write('Error: Invalid value for --port - Expected a number between 1 and 65535\n');
       process.exit(2);
     }
-    createClient({
-      channel: opts.channel,
-      peer: opts.peer,
-      host: opts.host,
-      port,
-    });
+    createClient({ channel: opts.channel, peer: opts.peer, host: opts.host, port });
   });
 
 program.parse();

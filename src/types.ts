@@ -26,6 +26,8 @@ export interface SendParams {
   reply_to?: string;
   /** If set, plugin should send a streaming frame instead of a regular message */
   stream?: 'chunk' | 'end';
+  /** Progress event kind — sent as a separate frame to the TUI client */
+  progress?: 'thinking' | 'tool_call' | 'tool_result';
 }
 
 export interface HealthResult {

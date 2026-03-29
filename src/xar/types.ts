@@ -28,11 +28,13 @@ export interface InboundMessage {
 }
 
 export type XarOutboundEvent =
-  | { type: 'stream_start';    reply_context: ReplyContext; session_id: string }
-  | { type: 'stream_token';    session_id: string; token: string }
-  | { type: 'stream_thinking'; session_id: string; delta: string }
-  | { type: 'stream_end';      session_id: string }
-  | { type: 'stream_error';    session_id: string; error: string };
+  | { type: 'stream_start';       reply_context: ReplyContext; session_id: string }
+  | { type: 'stream_token';       session_id: string; token: string }
+  | { type: 'stream_thinking';    session_id: string; delta: string }
+  | { type: 'stream_tool_call';   session_id: string; tool_call: unknown }
+  | { type: 'stream_tool_result'; session_id: string; tool_result: unknown }
+  | { type: 'stream_end';         session_id: string }
+  | { type: 'stream_error';       session_id: string; error: string };
 
 /** Internal buffer unit used by XarClient when disconnected */
 export interface InboundEnvelope {

@@ -29,6 +29,8 @@ export interface SendParams {
   text: string;
   reply_to?: string;
   stream?: 'chunk' | 'end';
+  /** Progress event kind — sent as a separate frame to the TUI client */
+  progress?: 'thinking' | 'tool_call' | 'tool_result';
 }
 
 export interface HealthResult {
@@ -237,7 +239,9 @@ export class TuiPlugin {
     if (!ws) {
       throw new Error(`Peer ${params.peer_id} not connected`);
     }
-    if (params.stream === 'chunk') {
+    if (params.progress !== undefined) {
+      ws.send(JSON.stringify({ type: 'progress', kind: params.progress, text: params.text }));
+    } else if (params.stream === 'chunk') {
       ws.send(JSON.stringify({ type: 'stream_chunk', text: params.text }));
     } else if (params.stream === 'end') {
       ws.send(JSON.stringify({ type: 'stream_end' }));

@@ -98,7 +98,41 @@ export class Dispatcher {
       }
 
       case 'stream_thinking': {
-        // Intentionally ignored — does not affect output
+        const { session_id, delta } = event;
+        const state = this.sessions.get(session_id);
+        if (!state) return;
+        if (state.channelType === 'tui') {
+          const plugin = this.registry.getPlugin(state.channelId);
+          if (plugin) {
+            void plugin.send({ peer_id: state.peerId, session_id: state.sessionId, text: delta, progress: 'thinking' });
+          }
+        }
+        break;
+      }
+
+      case 'stream_tool_call': {
+        const { session_id, tool_call } = event;
+        const state = this.sessions.get(session_id);
+        if (!state) return;
+        if (state.channelType === 'tui') {
+          const plugin = this.registry.getPlugin(state.channelId);
+          if (plugin) {
+            void plugin.send({ peer_id: state.peerId, session_id: state.sessionId, text: JSON.stringify(tool_call), progress: 'tool_call' });
+          }
+        }
+        break;
+      }
+
+      case 'stream_tool_result': {
+        const { session_id, tool_result } = event;
+        const state = this.sessions.get(session_id);
+        if (!state) return;
+        if (state.channelType === 'tui') {
+          const plugin = this.registry.getPlugin(state.channelId);
+          if (plugin) {
+            void plugin.send({ peer_id: state.peerId, session_id: state.sessionId, text: JSON.stringify(tool_result), progress: 'tool_result' });
+          }
+        }
         break;
       }
     }

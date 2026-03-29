@@ -27,8 +27,6 @@ export class ChannelRegistry {
   private log(level: 'info' | 'warn' | 'error', msg: string): void {
     if (this.logger) {
       this.logger[level](msg);
-    } else {
-      process.stderr.write(`[ChannelRegistry] ${msg}\n`);
     }
   }
 

@@ -84,11 +84,15 @@ describe('ChannelRegistry.loadPlugins', () => {
 
   it('skips channels with unregistered type (logs error, no throw)', () => {
     const reg = new ChannelRegistry();
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const errors: string[] = [];
+    reg.setLogger({
+      info() {}, warn() {}, debug() {},
+      error(msg: string) { errors.push(msg); },
+      close: () => Promise.resolve(),
+    });
     reg.loadPlugins([makeConfig('ch1', 'unknown')]);
     expect(reg.getPlugin('ch1')).toBeUndefined();
-    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('unknown'));
-    stderrSpy.mockRestore();
+    expect(errors.some(e => e.includes('unknown'))).toBe(true);
   });
 
   it('returns undefined for channel not in loaded set', () => {

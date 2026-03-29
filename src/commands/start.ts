@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { resolveConfigPath, loadConfig, validateConfig, saveConfig, parseXarConfig } from '../config.js';
+import type { Config } from '../config.js';
 import { createFileLogger, createForegroundLogger } from '../repo-utils/logger.js';
 import { ChannelRegistry } from '../channels/registry.js';
 import { GatewayServer } from '../gateway/server.js';
@@ -209,6 +210,10 @@ export async function startCommand(opts: { config?: string; foreground: boolean 
   for (const type of channelTypes) {
     try {
       const plugin = await loadPluginForType(type, config)
+      // Pass logger to plugins that support it (duck-type check)
+      if ('setLogger' in plugin && typeof (plugin as Record<string, unknown>)['setLogger'] === 'function') {
+        (plugin as { setLogger(l: unknown): void }).setLogger(logger)
+      }
       registry.register(type, plugin)
       logger.info(`plugin loaded: type=${type}`)
     } catch (err) {

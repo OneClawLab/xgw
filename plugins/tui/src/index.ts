@@ -55,6 +55,20 @@ export interface ChannelConfig {
   [key: string]: unknown;
 }
 
+// ── Noop logger (default — silent) ──
+
+interface TuiLogger {
+  info(msg: string): void;
+  warn(msg: string): void;
+  error(msg: string): void;
+}
+
+const noopLogger: TuiLogger = {
+  info() {},
+  warn() {},
+  error() {},
+};
+
 // ── TuiPlugin ──
 
 export class TuiPlugin {
@@ -65,6 +79,11 @@ export class TuiPlugin {
   private onMessage: ((msg: Message) => Promise<void>) | null = null;
   /** Map peer_id → WebSocket connection */
   private peers = new Map<string, WebSocket>();
+  private log: TuiLogger = noopLogger;
+
+  setLogger(logger: TuiLogger): void {
+    this.log = logger;
+  }
 
   async pair(_config: ChannelConfig): Promise<PairResult> {
     return {
@@ -89,14 +108,14 @@ export class TuiPlugin {
       let peerId: string | null = null;
       let handshakeComplete = false;
 
-      process.stderr.write(`[tui-plugin] new ws connection on channel=${this.channelId}\n`);
+      this.log.info(`new ws connection on channel=${this.channelId}`);
 
       ws.on('message', (data) => {
         let frame: Record<string, unknown>;
         try {
           frame = JSON.parse(String(data)) as Record<string, unknown>;
         } catch {
-          process.stderr.write(`[tui-plugin] bad JSON from peer=${peerId ?? 'unknown'}\n`);
+          this.log.warn(`bad JSON from peer=${peerId ?? 'unknown'}`);
           ws.send(
             JSON.stringify({
               type: 'error',
@@ -109,7 +128,7 @@ export class TuiPlugin {
         }
 
         const frameType = frame['type'];
-        process.stderr.write(`[tui-plugin] frame type=${String(frameType)} peer=${peerId ?? 'unknown'} handshake=${handshakeComplete}\n`);
+        this.log.info(`frame type=${String(frameType)} peer=${peerId ?? 'unknown'} handshake=${handshakeComplete}`);
 
         // ── Handshake ──
         if (!handshakeComplete) {
@@ -144,7 +163,7 @@ export class TuiPlugin {
           }
 
           if (helloChannelId !== this.channelId) {
-            process.stderr.write(`[tui-plugin] channel mismatch: got=${helloChannelId} expected=${this.channelId}\n`);
+            this.log.warn(`channel mismatch: got=${helloChannelId} expected=${this.channelId}`);
             ws.send(
               JSON.stringify({
                 type: 'error',
@@ -159,7 +178,7 @@ export class TuiPlugin {
           peerId = helloPeerId;
           handshakeComplete = true;
           this.peers.set(peerId, ws);
-          process.stderr.write(`[tui-plugin] handshake ok: channel=${this.channelId} peer=${peerId}\n`);
+          this.log.info(`handshake ok: channel=${this.channelId} peer=${peerId}`);
           ws.send(
             JSON.stringify({
               type: 'hello_ack',
@@ -181,7 +200,7 @@ export class TuiPlugin {
           typeof frame['text'] === 'string' &&
           peerId
         ) {
-          process.stderr.write(`[tui-plugin] inbound message: peer=${peerId} text=${String(frame['text']).slice(0, 80)}\n`);
+          this.log.info(`inbound message: peer=${peerId} text=${String(frame['text']).slice(0, 80)}`);
           const msg: Message = {
             id: randomUUID(),
             channel_id: this.channelId,
@@ -199,14 +218,14 @@ export class TuiPlugin {
       });
 
       ws.on('close', () => {
-        process.stderr.write(`[tui-plugin] peer disconnected: peer=${peerId ?? 'unknown'}\n`);
+        this.log.info(`peer disconnected: peer=${peerId ?? 'unknown'}`);
         if (peerId) {
           this.peers.delete(peerId);
         }
       });
 
       ws.on('error', (err) => {
-        process.stderr.write(`[tui-plugin] ws error: peer=${peerId ?? 'unknown'} err=${err.message}\n`);
+        this.log.error(`ws error: peer=${peerId ?? 'unknown'} err=${err.message}`);
         if (peerId) {
           this.peers.delete(peerId);
         }

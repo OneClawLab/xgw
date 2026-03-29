@@ -16,7 +16,8 @@ export function pluginRemove(config: Config, type: string): Config {
   }
   const plugins = { ...config.plugins };
   delete plugins[type];
-  return { ...config, plugins: Object.keys(plugins).length > 0 ? plugins : undefined };
+  const { plugins: _removed, ...rest } = config;
+  return Object.keys(plugins).length > 0 ? { ...rest, plugins } : rest;
 }
 
 export function pluginList(config: Config): PluginEntry[] {

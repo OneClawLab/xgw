@@ -75,4 +75,6 @@ export interface SessionState {
   flushTimer: ReturnType<typeof setTimeout> | null;
   /** Timeout handle for stream_end watchdog */
   watchdogTimer: ReturnType<typeof setTimeout> | null;
+  /** Pending progress sends (tool_result etc.) that must complete before stream_end */
+  pendingProgress?: Promise<void>;
 }

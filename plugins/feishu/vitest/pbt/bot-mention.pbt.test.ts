@@ -6,17 +6,15 @@ import { checkBotMentioned, stripBotMention } from '../../src/event-handler.js';
 function makeEvent(
   mentions?: Array<{ key: string; id: { open_id?: string }; name: string }>,
 ): FeishuMessageEvent {
-  return {
-    sender: { sender_id: {} },
-    message: {
-      message_id: 'msg1',
-      chat_id: 'chat1',
-      chat_type: 'group',
-      message_type: 'text',
-      content: '{}',
-      mentions,
-    },
+  const msg: FeishuMessageEvent['message'] = {
+    message_id: 'msg1',
+    chat_id: 'chat1',
+    chat_type: 'group',
+    message_type: 'text',
+    content: '{}',
   };
+  if (mentions !== undefined) msg.mentions = mentions;
+  return { sender: { sender_id: {} }, message: msg };
 }
 
 const mentionArb = fc.record({

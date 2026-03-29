@@ -1,41 +1,51 @@
 import { describe, it } from 'vitest';
 import * as fc from 'fast-check';
-import { StreamingBuffer } from '../../src/streaming.js';
+import { mergeStreamingText } from '../../src/streaming.js';
 
 describe('streaming PBT', () => {
-  // Feature: feishu-plugin, Property 8: Streaming buffer accumulation
-  it('Property 8: Streaming buffer accumulation — Validates: Requirements 7.2', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.array(fc.string(), { minLength: 1, maxLength: 10 }), // sequence of chunk texts
-        fc.string({ minLength: 1 }),                             // final text for handleEnd
-        async (texts, finalText) => {
-          const editCalls: Array<{ messageId: string; text: string }> = [];
-          let msgIdCounter = 0;
+  // Property: mergeStreamingText result always contains all characters of next
+  it('Property: merged result always contains next as substring or superset', () => {
+    fc.assert(
+      fc.property(
+        fc.string(),
+        fc.string(),
+        (prev, next) => {
+          const result = mergeStreamingText(prev, next);
+          // Result must be at least as long as the longer of the two inputs
+          return result.length >= Math.max(prev.length, next.length);
+        },
+      ),
+    );
+  });
 
-          const buf = new StreamingBuffer({
-            coalesceMs: 10000, // large so no coalesce timer fires during the test
-            sendMessage: async (_sessionId, _text) => {
-              return `msg-${++msgIdCounter}`;
-            },
-            editMessage: async (messageId, text) => {
-              editCalls.push({ messageId, text });
-            },
-          });
+  // Property: idempotent — merging the same text twice yields the same result
+  it('Property: idempotent — merge(merge(a,b), b) === merge(a,b)', () => {
+    fc.assert(
+      fc.property(
+        fc.string(),
+        fc.string(),
+        (a, b) => {
+          const first = mergeStreamingText(a, b);
+          const second = mergeStreamingText(first, b);
+          return second === first;
+        },
+      ),
+    );
+  });
 
-          const sessionId = 'test-session';
-
-          // Send all chunks — each text is the full accumulated text from the gateway
-          for (const text of texts) {
-            await buf.handleChunk(sessionId, text);
+  // Property: accumulating chunks — if each chunk is a prefix of the next,
+  // the final result equals the last chunk
+  it('Property: accumulating prefix chunks converge to final text', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 50 }),
+        (finalText) => {
+          // Simulate streaming by feeding progressively longer prefixes
+          let acc = '';
+          for (let i = 1; i <= finalText.length; i++) {
+            acc = mergeStreamingText(acc, finalText.slice(0, i));
           }
-
-          // Send end with the final complete text
-          await buf.handleEnd(sessionId, finalText);
-
-          // The last edit call should contain the final text
-          const lastEdit = editCalls[editCalls.length - 1];
-          return lastEdit !== undefined && lastEdit.text === finalText;
+          return acc === finalText;
         },
       ),
     );

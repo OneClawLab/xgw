@@ -78,8 +78,8 @@ describe('Dispatcher — stream_start initialises session state (req 3.4)', () =
     dispatcher.handle(streamToken('sess1', 'hello'));
     expect(plugin.send).not.toHaveBeenCalled();
 
-    // After timer fires, the batch is flushed
-    vi.runAllTimers();
+    // Advance only past the TUI flush interval (100ms), not the watchdog (120s)
+    vi.advanceTimersByTime(200);
     expect(plugin.send).toHaveBeenCalledOnce();
     expect(plugin.send).toHaveBeenCalledWith({
       peer_id: 'peer1',
@@ -149,8 +149,8 @@ describe('Dispatcher — TUI stream_end flushes buffer and sends stream_end fram
     const ctx = makeReplyContext({ channel_type: 'tui', channel_id: 'ch1' });
     dispatcher.handle(streamStart('sess1', ctx));
 
-    // Flush via timer first (empty buffer)
-    vi.runAllTimers();
+    // Advance past TUI flush interval only (not watchdog)
+    vi.advanceTimersByTime(200);
     plugin.send.mockClear();
 
     dispatcher.handle(streamEnd('sess1'));
@@ -351,5 +351,47 @@ describe('Dispatcher — non-TUI channel accumulates tokens and sends on stream_
       session_id: 'sess1',
       text: 'hello world',
     });
+  });
+});
+
+describe('Dispatcher — streaming plugin receives tokens in real-time', () => {
+  function makeStreamingPlugin() {
+    return { ...makePlugin(), streaming: true };
+  }
+
+  it('forwards each stream_token as accumulated chunk immediately', () => {
+    const plugin = makeStreamingPlugin();
+    const registry = makeRegistry({ 'fs-ch': plugin });
+    const logger = makeLogger();
+    const dispatcher = new Dispatcher(registry, logger);
+
+    const ctx = makeReplyContext({ channel_type: 'feishu', channel_id: 'fs-ch', peer_id: 'p1' });
+    dispatcher.handle(streamStart('sess1', ctx));
+    dispatcher.handle(streamToken('sess1', 'Hello'));
+    dispatcher.handle(streamToken('sess1', ', '));
+    dispatcher.handle(streamToken('sess1', 'world'));
+
+    // Each token triggers an immediate send with accumulated text
+    expect(plugin.send).toHaveBeenCalledTimes(3);
+    expect(plugin.send).toHaveBeenNthCalledWith(1, { peer_id: 'p1', session_id: 'sess1', text: 'Hello', stream: 'chunk' });
+    expect(plugin.send).toHaveBeenNthCalledWith(2, { peer_id: 'p1', session_id: 'sess1', text: 'Hello, ', stream: 'chunk' });
+    expect(plugin.send).toHaveBeenNthCalledWith(3, { peer_id: 'p1', session_id: 'sess1', text: 'Hello, world', stream: 'chunk' });
+  });
+
+  it('sends only stream_end (no extra chunk) on stream_end', () => {
+    const plugin = makeStreamingPlugin();
+    const registry = makeRegistry({ 'fs-ch': plugin });
+    const logger = makeLogger();
+    const dispatcher = new Dispatcher(registry, logger);
+
+    const ctx = makeReplyContext({ channel_type: 'feishu', channel_id: 'fs-ch', peer_id: 'p1' });
+    dispatcher.handle(streamStart('sess1', ctx));
+    dispatcher.handle(streamToken('sess1', 'hi'));
+    plugin.send.mockClear();
+
+    dispatcher.handle(streamEnd('sess1'));
+
+    expect(plugin.send).toHaveBeenCalledOnce();
+    expect(plugin.send).toHaveBeenCalledWith({ peer_id: 'p1', session_id: 'sess1', text: 'hi', stream: 'end' });
   });
 });

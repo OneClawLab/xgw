@@ -9,7 +9,9 @@
 - WebSocket 长连接接收飞书消息（SDK 内置自动重连）
 - 支持单聊（p2p）和群聊（group）
 - 群聊可配置是否需要 @bot 才触发
-- Streaming 支持：中间 chunk 丢弃，`stream: 'end'` 时发送完整回复
+- 收到消息立即添加 👀 reaction，表示已收到
+- 真正的流式响应：通过飞书 CardKit API 创建 streaming card，实时更新内容
+- 进度状态（thinking / tool_call 等）在同一张卡片内更新，无需额外消息
 - 凭证验证（`pair`）：自动获取 bot open_id
 
 ## 安装
@@ -48,7 +50,7 @@ channels:
     appSecret: "xxxx"
     domain: feishu          # feishu（默认）或 lark（国际版）
     requireMention: true    # 群聊是否需要 @bot，默认 true
-    streamingCoalesceMs: 500
+    streamingThrottleMs: 100  # streaming card 更新节流，默认 100ms
 ```
 
 ### 配置字段
@@ -59,9 +61,26 @@ channels:
 | `appSecret` | string | ✅ | — | 飞书应用密钥 |
 | `domain` | `'feishu'` \| `'lark'` \| URL | — | `'feishu'` | API 域名 |
 | `requireMention` | boolean | — | `true` | 群聊是否需要 @bot |
-| `streamingCoalesceMs` | number | — | `500` | Streaming 合并间隔（ms，当前版本未使用） |
+| `streamingThrottleMs` | number | — | `100` | Streaming card 更新节流间隔（ms） |
 
 ## 消息行为
+
+**收到消息时：** 立即在原消息上添加 👀 reaction，表示已收到（best-effort，失败不影响处理）。
+
+**Streaming 流程：**
+1. 收到第一个 `progress` 或 `stream: 'chunk'` 时，通过 CardKit API 创建 streaming card 并发送 interactive 消息
+2. 后续 chunk 通过 `PUT /cardkit/v1/cards/:id/elements/content/content` 实时更新卡片内容（节流）
+3. `stream: 'end'` 时写入最终文本，然后 `PATCH /cardkit/v1/cards/:id/settings` 关闭 streaming mode
+
+**进度状态映射：**
+
+| progress | 显示文本 |
+|----------|---------|
+| `thinking` | 🤔 思考中... |
+| `tool_call` | 🔧 调用工具... |
+| `tool_result` | 📋 处理结果... |
+| `compact_start` | 🗜️ 压缩上下文... |
+| `compact_end` | ✅ 上下文已压缩 |
 
 **session_id 策略：**
 - 单聊（p2p）：`session_id = sender open_id`
@@ -77,7 +96,7 @@ channels:
 | `file` | `[file: name]` 占位符 |
 | 其他 | `[unsupported: type]` 占位符 |
 
-**Streaming：** 当前实现丢弃中间 `chunk`，在 `stream: 'end'` 时发送完整文本（飞书文本消息不支持编辑）。
+**Streaming：** 使用飞书 CardKit API 实现真正的流式更新，每个 session 维护一个 streaming card，chunk 实时写入，`stream: 'end'` 时关闭 streaming mode。
 
 ## 开发
 

@@ -30,7 +30,7 @@ export interface SendParams {
   reply_to?: string;
   stream?: 'chunk' | 'end';
   /** Progress event kind — sent as a separate frame to the TUI client */
-  progress?: 'thinking' | 'tool_call' | 'tool_result';
+  progress?: 'thinking' | 'tool_call' | 'tool_result' | 'ctx_usage' | 'compact_start' | 'compact_end';
 }
 
 export interface HealthResult {

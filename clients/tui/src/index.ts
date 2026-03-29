@@ -15,7 +15,7 @@ type TuiFrame =
   | { type: 'message'; text: string }
   | { type: 'stream_chunk'; text: string }
   | { type: 'stream_end' }
-  | { type: 'progress'; kind: 'thinking' | 'tool_call' | 'tool_result'; text: string }
+  | { type: 'progress'; kind: 'thinking' | 'tool_call' | 'tool_result' | 'ctx_usage' | 'compact_start' | 'compact_end'; text: string }
   | { type: 'ping' }
   | { type: 'pong' };
 
@@ -152,6 +152,23 @@ function createClient(opts: ClientOptions): void {
             try { renderToolCall(JSON.parse(frame.text)); } catch { process.stderr.write(`  tool_call: ${frame.text}\n`); }
           } else if (frame.kind === 'tool_result') {
             try { renderToolResult(JSON.parse(frame.text)); } catch { process.stderr.write(`  tool_result: ${frame.text}\n`); }
+          } else if (frame.kind === 'ctx_usage') {
+            try {
+              const u = JSON.parse(frame.text) as { total_tokens: number; budget_tokens: number; pct: number };
+              const toK = (n: number): string => `${Math.round(n / 1000)}K`;
+              process.stderr.write(`\nctx: ${u.pct}% (${toK(u.total_tokens)}/${toK(u.budget_tokens)})\n`);
+            } catch { /* ignore malformed */ }
+          } else if (frame.kind === 'compact_start') {
+            try {
+              const info = JSON.parse(frame.text) as { reason: string };
+              process.stderr.write(`compacting session (${info.reason})...\n`);
+            } catch { process.stderr.write('compacting session...\n'); }
+          } else if (frame.kind === 'compact_end') {
+            try {
+              const info = JSON.parse(frame.text) as { before_tokens: number; after_tokens: number };
+              const toK = (n: number): string => `${Math.round(n / 1000)}K`;
+              process.stderr.write(`compact done (${toK(info.before_tokens)} → ${toK(info.after_tokens)})\n`);
+            } catch { /* ignore malformed */ }
           }
           break;
 

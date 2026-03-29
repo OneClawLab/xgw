@@ -135,6 +135,39 @@ export class Dispatcher {
         }
         break;
       }
+
+      case 'stream_ctx_usage': {
+        const { reply_context, ctx_usage } = event;
+        if (reply_context.channel_type === 'tui') {
+          const plugin = this.registry.getPlugin(reply_context.channel_id);
+          if (plugin) {
+            void plugin.send({ peer_id: reply_context.peer_id, session_id: reply_context.session_id, text: JSON.stringify(ctx_usage), progress: 'ctx_usage' });
+          }
+        }
+        break;
+      }
+
+      case 'stream_compact_start': {
+        const { reply_context, compact_start } = event;
+        if (reply_context.channel_type === 'tui') {
+          const plugin = this.registry.getPlugin(reply_context.channel_id);
+          if (plugin) {
+            void plugin.send({ peer_id: reply_context.peer_id, session_id: reply_context.session_id, text: JSON.stringify(compact_start), progress: 'compact_start' });
+          }
+        }
+        break;
+      }
+
+      case 'stream_compact_end': {
+        const { reply_context, compact_end } = event;
+        if (reply_context.channel_type === 'tui') {
+          const plugin = this.registry.getPlugin(reply_context.channel_id);
+          if (plugin) {
+            void plugin.send({ peer_id: reply_context.peer_id, session_id: reply_context.session_id, text: JSON.stringify(compact_end), progress: 'compact_end' });
+          }
+        }
+        break;
+      }
     }
   }
 

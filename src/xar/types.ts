@@ -27,14 +27,32 @@ export interface InboundMessage {
   reply_context: ReplyContext;
 }
 
+export interface CtxUsage {
+  total_tokens: number;
+  budget_tokens: number;
+  pct: number;
+}
+
+export interface CompactStartInfo {
+  reason: 'threshold' | 'interval';
+}
+
+export interface CompactEndInfo {
+  before_tokens: number;
+  after_tokens: number;
+}
+
 export type XarOutboundEvent =
-  | { type: 'stream_start';       reply_context: ReplyContext; session_id: string }
-  | { type: 'stream_token';       session_id: string; token: string }
-  | { type: 'stream_thinking';    session_id: string; delta: string }
-  | { type: 'stream_tool_call';   session_id: string; tool_call: unknown }
-  | { type: 'stream_tool_result'; session_id: string; tool_result: unknown }
-  | { type: 'stream_end';         session_id: string }
-  | { type: 'stream_error';       session_id: string; error: string };
+  | { type: 'stream_start';         reply_context: ReplyContext; session_id: string }
+  | { type: 'stream_token';         session_id: string; token: string }
+  | { type: 'stream_thinking';      session_id: string; delta: string }
+  | { type: 'stream_tool_call';     session_id: string; tool_call: unknown }
+  | { type: 'stream_tool_result';   session_id: string; tool_result: unknown }
+  | { type: 'stream_end';           session_id: string }
+  | { type: 'stream_error';         session_id: string; error: string }
+  | { type: 'stream_ctx_usage';     reply_context: ReplyContext; session_id: string; ctx_usage: CtxUsage }
+  | { type: 'stream_compact_start'; reply_context: ReplyContext; session_id: string; compact_start: CompactStartInfo }
+  | { type: 'stream_compact_end';   reply_context: ReplyContext; session_id: string; compact_end: CompactEndInfo };
 
 /** Internal buffer unit used by XarClient when disconnected */
 export interface InboundEnvelope {

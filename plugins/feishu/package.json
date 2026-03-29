@@ -1,0 +1,27 @@
+{
+  "name": "@theclawlab/xgw-plugin-feishu",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Feishu/Lark channel plugin for xgw",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "release:local": "npm run build && npm link"
+  },
+  "files": ["dist", "README.md"],
+  "license": "MIT",
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "fast-check": "^3.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0"
+  }
+}

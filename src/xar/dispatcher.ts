@@ -179,6 +179,14 @@ export class Dispatcher {
           clearTimeout(state.flushTimer);
         }
         this.logger.error(`Dispatcher: stream_error for session ${session_id}: ${error}`);
+
+        // Forward error to client so they don't hang
+        if (state) {
+          const plugin = this.registry.getPlugin(state.channelId);
+          if (plugin) {
+            this.safeSend(plugin, { peer_id: state.peerId, session_id: state.sessionId, text: `Error: ${error}` }, state.channelId);
+          }
+        }
         this.sessions.delete(session_id);
         break;
       }

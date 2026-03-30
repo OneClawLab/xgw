@@ -249,7 +249,7 @@ describe('Dispatcher — stream_error logs error (req 3.3)', () => {
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('something went wrong'));
   });
 
-  it('does not call plugin.send on stream_error', () => {
+  it('forwards error to client on stream_error', () => {
     const plugin = makePlugin();
     const registry = makeRegistry({ ch1: plugin });
     const logger = makeLogger();
@@ -260,7 +260,12 @@ describe('Dispatcher — stream_error logs error (req 3.3)', () => {
     dispatcher.handle(streamError('sess1', 'oops'));
 
     vi.runAllTimers();
-    expect(plugin.send).not.toHaveBeenCalled();
+    expect(plugin.send).toHaveBeenCalledOnce();
+    expect(plugin.send).toHaveBeenCalledWith(expect.objectContaining({
+      peer_id: 'peer1',
+      session_id: 'sess1',
+      text: 'Error: oops',
+    }));
   });
 
   it('cleans up session state after stream_error', () => {

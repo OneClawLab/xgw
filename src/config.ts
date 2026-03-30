@@ -18,16 +18,10 @@ export interface RoutingRule {
   agent: string;
 }
 
-export interface AgentConfig {
-  id: string;
-  inbox: string;
-}
-
 export interface Config {
   gateway: GatewayConfig;
   channels: ChannelConfig[];
   routing: RoutingRule[];
-  agents: Record<string, { inbox: string }>;
   /** Plugin registry: type → npm package name */
   plugins?: Record<string, string>;
   /** Optional xar IPC connection config (v2 mode) */
@@ -116,10 +110,11 @@ export function validateConfig(config: unknown): ValidationResult {
         if (ids.has(entry['id'])) {
           errors.push(`Duplicate channel id: ${entry['id']} - Use unique ids for each channel`);
         }
+        // channel_id must be in <type>:<instance> format
+        if (!entry['id'].includes(':')) {
+          errors.push(`Channel id "${entry['id']}" must be in <type>:<instance> format (e.g. "telegram:main")`);
+        }
         ids.add(entry['id']);
-      }
-      if (typeof entry['type'] !== 'string') {
-        errors.push('Channel entry missing type (expected string) - Add a type field to the channel entry');
       }
     }
   }
@@ -130,9 +125,6 @@ export function validateConfig(config: unknown): ValidationResult {
   } else {
     const channelIds = Array.isArray(c['channels'])
       ? new Set((c['channels'] as Array<Record<string, unknown>>).filter(ch => typeof ch['id'] === 'string').map(ch => ch['id'] as string))
-      : new Set<string>();
-    const agentIds = (c['agents'] != null && typeof c['agents'] === 'object' && !Array.isArray(c['agents']))
-      ? new Set(Object.keys(c['agents'] as object))
       : new Set<string>();
 
     for (const rule of c['routing'] as unknown[]) {
@@ -151,24 +143,6 @@ export function validateConfig(config: unknown): ValidationResult {
       }
       if (typeof r['agent'] !== 'string') {
         errors.push('Routing rule missing agent (expected string) - Add an agent field to the routing rule');
-      } else if (!agentIds.has(r['agent'])) {
-        errors.push(`Routing rule references unknown agent: ${r['agent']} - Add the agent or fix the rule`);
-      }
-    }
-  }
-
-  // ── agents ──
-  if (c['agents'] == null || typeof c['agents'] !== 'object' || Array.isArray(c['agents'])) {
-    errors.push('Missing required field agents - Add the field to your config file');
-  } else {
-    for (const [id, val] of Object.entries(c['agents'] as object)) {
-      if (val == null || typeof val !== 'object') {
-        errors.push(`Agent ${id} must be an object with inbox field - Fix the agent entry in your config file`);
-        continue;
-      }
-      const agent = val as Record<string, unknown>;
-      if (typeof agent['inbox'] !== 'string' || agent['inbox'] === '') {
-        errors.push(`Agent ${id} has invalid or empty inbox path - Set a valid inbox path for the agent`);
       }
     }
   }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { agentAdd, agentRemove } from '../../src/commands/agent-mgmt.js';
+import { agentList } from '../../src/commands/agent-mgmt.js';
 import type { Config } from '../../src/config.js';
 
 // ── Generators ─────────────────────────────────────────────────────
@@ -9,200 +9,93 @@ import type { Config } from '../../src/config.js';
 const genId = () =>
   fc.stringMatching(/^[a-z][a-z0-9_-]{0,19}$/).filter((s) => s.length > 0);
 
-/** Non-empty inbox path */
-const genInboxPath = () =>
-  fc.stringMatching(/^\/[a-z][a-z0-9/_-]{0,39}$/).filter((s) => s.length > 0);
+/** Channel id in <type>:<instance> format */
+const genChannelId = () =>
+  fc.tuple(
+    fc.constantFrom('tui', 'telegram', 'slack', 'discord'),
+    genId(),
+  ).map(([type, instance]) => `${type}:${instance}`);
 
-/** Generate a minimal valid Config with the given agents map */
-const genBaseConfig = (agents: Record<string, { inbox: string }>): Config => ({
+/** Generate a routing rule */
+const genRoutingRule = () =>
+  fc.tuple(genChannelId(), genId(), genId()).map(([channel, peer, agent]) => ({
+    channel,
+    peer,
+    agent,
+  }));
+
+/** Generate a minimal valid Config with the given routing rules */
+const genConfig = (routing: Array<{ channel: string; peer: string; agent: string }>): Config => ({
   gateway: { host: '127.0.0.1', port: 18790 },
   channels: [],
-  routing: [],
-  agents,
+  routing,
 });
 
-/** Generate a random agents record with 0–5 entries */
-const genAgentsRecord = () =>
-  fc.array(fc.tuple(genId(), genInboxPath()), { minLength: 0, maxLength: 5 })
-    .map((pairs) => {
-      const agents: Record<string, { inbox: string }> = {};
-      for (const [id, inbox] of pairs) {
-        agents[id] = { inbox };
-      }
-      return agents;
-    });
+// ── Property 14: agentList extracts agents from routing rules ──────
+// **Validates: Requirements 8.1**
 
-/**
- * Generate a config containing at least one agent that is NOT referenced
- * by any routing rule, so it can be safely removed.
- */
-const genConfigWithRemovableAgent = () =>
-  fc.tuple(genAgentsRecord(), genId(), genInboxPath()).map(([baseAgents, targetId, targetInbox]) => {
-    // Ensure the target agent exists in the map
-    const agents = { ...baseAgents, [targetId]: { inbox: targetInbox } };
-    // Config has no routing rules referencing any agent (empty routing)
-    const config = genBaseConfig(agents);
-    return { config, targetId };
-  });
-
-// ── Property 14: Agent add/update registers inbox correctly ────────
-// **Validates: Requirements 8.1, 8.2**
-
-describe('Property 14: Agent add/update registers inbox correctly', () => {
-  it('new agent is registered with the specified inbox path', () => {
+describe('Property 14: agentList extracts agents from routing rules', () => {
+  it('every agent referenced in routing appears in the result', () => {
     fc.assert(
       fc.property(
-        genAgentsRecord(),
-        genId(),
-        genInboxPath(),
-        (existingAgents, newId, newInbox) => {
-          const config = genBaseConfig(existingAgents);
-          const result = agentAdd(config, newId, newInbox);
+        fc.array(genRoutingRule(), { minLength: 0, maxLength: 10 }),
+        (routing) => {
+          const config = genConfig(routing);
+          const result = agentList(config);
 
-          // The agent exists in the result with the correct inbox
-          expect(result.agents[newId]).toEqual({ inbox: newInbox });
+          const expectedAgentIds = new Set(routing.map((r) => r.agent));
+          const resultIds = new Set(result.map((a) => a.id));
+          expect(resultIds).toEqual(expectedAgentIds);
         },
       ),
       { numRuns: 100 },
     );
   });
 
-  it('existing agent inbox is updated to the new path', () => {
+  it('each agent lists exactly the unique channels it is associated with', () => {
     fc.assert(
       fc.property(
-        genAgentsRecord(),
-        genId(),
-        genInboxPath(),
-        genInboxPath(),
-        (existingAgents, agentId, oldInbox, newInbox) => {
-          // Seed the agent with the old inbox
-          const agents = { ...existingAgents, [agentId]: { inbox: oldInbox } };
-          const config = genBaseConfig(agents);
+        fc.array(genRoutingRule(), { minLength: 1, maxLength: 10 }),
+        (routing) => {
+          const config = genConfig(routing);
+          const result = agentList(config);
 
-          const result = agentAdd(config, agentId, newInbox);
-
-          // Inbox is updated
-          expect(result.agents[agentId]).toEqual({ inbox: newInbox });
-        },
-      ),
-      { numRuns: 100 },
-    );
-  });
-
-  it('does not mutate the original config', () => {
-    fc.assert(
-      fc.property(
-        genAgentsRecord(),
-        genId(),
-        genInboxPath(),
-        (existingAgents, newId, newInbox) => {
-          const config = genBaseConfig(existingAgents);
-          const originalAgents = { ...config.agents };
-
-          agentAdd(config, newId, newInbox);
-
-          // Original config is unchanged
-          expect(config.agents).toEqual(originalAgents);
-        },
-      ),
-      { numRuns: 100 },
-    );
-  });
-
-  it('preserves all other agents unchanged', () => {
-    fc.assert(
-      fc.property(
-        genAgentsRecord(),
-        genId(),
-        genInboxPath(),
-        (existingAgents, newId, newInbox) => {
-          const config = genBaseConfig(existingAgents);
-          const result = agentAdd(config, newId, newInbox);
-
-          // Every pre-existing agent (other than the target) is preserved
-          for (const [id, entry] of Object.entries(existingAgents)) {
-            if (id !== newId) {
-              expect(result.agents[id]).toEqual(entry);
-            }
+          for (const entry of result) {
+            const expectedChannels = new Set(
+              routing.filter((r) => r.agent === entry.id).map((r) => r.channel),
+            );
+            expect(new Set(entry.channels)).toEqual(expectedChannels);
           }
         },
       ),
       { numRuns: 100 },
     );
   });
-});
 
-// ── Property 15: Agent remove deletes registration ─────────────────
-// **Validates: Requirements 8.3**
-
-describe('Property 15: Agent remove deletes registration', () => {
-  it('removed agent no longer exists in the config', () => {
+  it('returns empty array when routing is empty', () => {
     fc.assert(
-      fc.property(genConfigWithRemovableAgent(), ({ config, targetId }) => {
-        const result = agentRemove(config, targetId);
-
-        expect(result.agents[targetId]).toBeUndefined();
-      }),
-      { numRuns: 100 },
-    );
-  });
-
-  it('agent count decreases by one after removal', () => {
-    fc.assert(
-      fc.property(genConfigWithRemovableAgent(), ({ config, targetId }) => {
-        const originalCount = Object.keys(config.agents).length;
-        const result = agentRemove(config, targetId);
-
-        expect(Object.keys(result.agents).length).toBe(originalCount - 1);
-      }),
-      { numRuns: 100 },
-    );
-  });
-
-  it('preserves all other agents unchanged', () => {
-    fc.assert(
-      fc.property(genConfigWithRemovableAgent(), ({ config, targetId }) => {
-        const result = agentRemove(config, targetId);
-
-        for (const [id, entry] of Object.entries(config.agents)) {
-          if (id !== targetId) {
-            expect(result.agents[id]).toEqual(entry);
-          }
-        }
-      }),
-      { numRuns: 100 },
+      fc.property(
+        fc.constant([]),
+        (routing) => {
+          const config = genConfig(routing);
+          expect(agentList(config)).toEqual([]);
+        },
+      ),
+      { numRuns: 1 },
     );
   });
 
   it('does not mutate the original config', () => {
     fc.assert(
-      fc.property(genConfigWithRemovableAgent(), ({ config, targetId }) => {
-        const originalAgents = { ...config.agents };
-
-        agentRemove(config, targetId);
-
-        expect(config.agents).toEqual(originalAgents);
-      }),
-      { numRuns: 100 },
-    );
-  });
-
-  it('throws when agent is referenced by routing rules', () => {
-    fc.assert(
       fc.property(
-        genId(),
-        genInboxPath(),
-        genId(),
-        genId(),
-        (agentId, inbox, channel, peer) => {
-          const config: Config = {
-            gateway: { host: '127.0.0.1', port: 18790 },
-            channels: [],
-            routing: [{ channel, peer, agent: agentId }],
-            agents: { [agentId]: { inbox } },
-          };
+        fc.array(genRoutingRule(), { minLength: 1, maxLength: 10 }),
+        (routing) => {
+          const config = genConfig(routing);
+          const originalRouting = [...config.routing];
 
-          expect(() => agentRemove(config, agentId)).toThrow(/referenced by routing rules/);
+          agentList(config);
+
+          expect(config.routing).toEqual(originalRouting);
         },
       ),
       { numRuns: 100 },

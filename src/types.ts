@@ -10,7 +10,7 @@ export interface Message {
   channel_id: string;
   peer_id: string;
   peer_name: string | null;
-  session_id: string;
+  conversation_id: string;
   text: string;
   attachments: Attachment[];
   reply_to: string | null;
@@ -21,7 +21,7 @@ export interface Message {
 
 export interface SendParams {
   peer_id: string;
-  session_id: string;
+  conversation_id: string;
   text: string;
   reply_to?: string;
   /** If set, plugin should send a streaming frame instead of a regular message */

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { loadConfig, validateConfig } from '../../src/config.js';
 import { routeRemove } from '../../src/commands/route.js';
-import { agentRemove } from '../../src/commands/agent-mgmt.js';
 import { channelAdd, channelRemove } from '../../src/commands/channel-mgmt.js';
 import type { Config } from '../../src/config.js';
 
@@ -36,18 +35,18 @@ const genId = () =>
 const genPath = () =>
   fc.stringMatching(/^\/tmp\/[a-z][a-z0-9_/-]{0,30}\.yaml$/).filter((s) => s.length > 5);
 
-/** Inbox path */
-const genInbox = () =>
-  fc.stringMatching(/^\/[a-z][a-z0-9_/-]{0,20}$/).filter((s) => s.length > 1);
+/** Channel id in <type>:<instance> format */
+const genChannelId = () =>
+  fc.tuple(fc.constantFrom('tui', 'telegram', 'slack'), genId())
+    .map(([type, instance]) => `${type}:${instance}`);
 
-/** Generate a valid Config with at least one channel, one agent, one route */
+/** Generate a valid Config with at least one channel, one route */
 const genValidConfig = (): fc.Arbitrary<Config> =>
-  fc.tuple(genId(), genId(), genId(), genInbox(), fc.nat({ max: 65535 })).map(
-    ([channelId, agentId, peerId, inbox, port]) => ({
+  fc.tuple(genChannelId(), genId(), genId(), fc.nat({ max: 65535 })).map(
+    ([channelId, agentId, peerId, port]) => ({
       gateway: { host: '127.0.0.1', port },
-      channels: [{ id: channelId, type: 'tui' }],
+      channels: [{ id: channelId, type: channelId.split(':')[0]! }],
       routing: [{ channel: channelId, peer: peerId, agent: agentId }],
-      agents: { [agentId]: { inbox } },
     }),
   );
 
@@ -79,7 +78,6 @@ describe('Property 27: Error message format', () => {
         fc.record({
           channels: fc.constant([]),
           routing: fc.constant([]),
-          agents: fc.constant({}),
         }),
         // gateway with wrong types
         fc.record({
@@ -89,32 +87,16 @@ describe('Property 27: Error message format', () => {
           }),
           channels: fc.constant([]),
           routing: fc.constant([]),
-          agents: fc.constant({}),
         }),
         // Missing channels
         fc.record({
           gateway: fc.record({ host: fc.constant('127.0.0.1'), port: fc.constant(8080) }),
           routing: fc.constant([]),
-          agents: fc.constant({}),
         }),
         // Missing routing
         fc.record({
           gateway: fc.record({ host: fc.constant('127.0.0.1'), port: fc.constant(8080) }),
           channels: fc.constant([]),
-          agents: fc.constant({}),
-        }),
-        // Missing agents
-        fc.record({
-          gateway: fc.record({ host: fc.constant('127.0.0.1'), port: fc.constant(8080) }),
-          channels: fc.constant([]),
-          routing: fc.constant([]),
-        }),
-        // Agent with empty inbox
-        fc.record({
-          gateway: fc.record({ host: fc.constant('127.0.0.1'), port: fc.constant(8080) }),
-          channels: fc.constant([]),
-          routing: fc.constant([]),
-          agents: fc.constant({ myagent: { inbox: '' } }),
         }),
       );
 
@@ -135,7 +117,7 @@ describe('Property 27: Error message format', () => {
 
   it('routeRemove error on missing route matches Error: <description> - <remediation>', () => {
     fc.assert(
-      fc.property(genValidConfig(), genId(), genId(), (config, channel, peer) => {
+      fc.property(genValidConfig(), genChannelId(), genId(), (config, channel, peer) => {
         // Ensure the (channel, peer) combo does NOT exist in routing
         const filtered = {
           ...config,
@@ -150,24 +132,6 @@ describe('Property 27: Error message format', () => {
           routeRemove(filtered, channel, peer);
           // Should have thrown
           expect.unreachable('routeRemove should throw for missing route');
-        } catch (err) {
-          expect(err).toBeInstanceOf(Error);
-          assertErrorFormat((err as Error).message);
-        }
-      }),
-      { numRuns: 100 },
-    );
-  });
-
-  it('agentRemove error when referenced by routes matches Error: <description> - <remediation>', () => {
-    fc.assert(
-      fc.property(genValidConfig(), (config) => {
-        // The generated config has one agent referenced by one route
-        const agentId = Object.keys(config.agents)[0]!;
-        try {
-          agentRemove(config, agentId);
-          // Should throw because routing references this agent
-          expect.unreachable('agentRemove should throw for referenced agent');
         } catch (err) {
           expect(err).toBeInstanceOf(Error);
           assertErrorFormat((err as Error).message);
@@ -196,7 +160,7 @@ describe('Property 27: Error message format', () => {
 
   it('channelRemove error on missing channel matches Error: <description> - <remediation>', () => {
     fc.assert(
-      fc.property(genValidConfig(), genId(), (config, missingId) => {
+      fc.property(genValidConfig(), genChannelId(), (config, missingId) => {
         // Ensure the id doesn't exist
         if (config.channels.some((ch) => ch.id === missingId)) return;
 

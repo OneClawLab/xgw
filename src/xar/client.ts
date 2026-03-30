@@ -34,14 +34,16 @@ export class XarClient {
     await this._attemptConnect();
   }
 
-  /** Send an inbound message to xar. Buffers when disconnected. */
-  async sendInbound(agentId: string, message: InboundMessage): Promise<void> {
+  /** Send an inbound message to xar. Buffers when disconnected. Returns 'sent' or 'buffered'. */
+  async sendInbound(agentId: string, message: InboundMessage): Promise<'sent' | 'buffered'> {
     const envelope: InboundEnvelope = { agentId, message, enqueuedAt: Date.now() };
 
     if (this.state === 'connected' && this.ws) {
       this._sendEnvelope(envelope);
+      return 'sent';
     } else {
       this._enqueue(envelope);
+      return 'buffered';
     }
   }
 

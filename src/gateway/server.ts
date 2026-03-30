@@ -3,7 +3,6 @@ import type { Server } from 'node:http';
 import type { Config } from '../config.js';
 import type { GatewayStats, Message } from '../types.js';
 import { Router } from './router.js';
-import { InboxWriter } from '../inbox.js';
 import type { ChannelRegistry } from '../channels/registry.js';
 import type { Logger } from '../repo-utils/logger.js';
 import type { XarClient } from '../xar/client.js';
@@ -12,7 +11,6 @@ import { Dispatcher } from '../xar/dispatcher.js';
 export class GatewayServer {
   private server: Server | null = null;
   private router: Router;
-  private inbox: InboxWriter;
   private logger: Logger;
   private startTime = 0;
   private messagesIn = 0;
@@ -24,7 +22,6 @@ export class GatewayServer {
 
   constructor(logger: Logger, xarClient?: XarClient) {
     this.router = new Router();
-    this.inbox = new InboxWriter();
     this.logger = logger;
     this.xarClient = xarClient;
   }
@@ -50,7 +47,7 @@ export class GatewayServer {
       await this.xarClient.connect();
     }
 
-    // Create onMessage handler: plugin → router → xarClient (or inbox fallback)
+    // Create onMessage handler: plugin → router → xarClient
     const onMessage = async (msg: Message): Promise<void> => {
       this.messagesIn++;
       const agentId = this.router.resolve(msg.channel_id, msg.peer_id);
@@ -58,13 +55,12 @@ export class GatewayServer {
         this.logger.warn(
           `routing miss: channel=${msg.channel_id} peer=${msg.peer_id} (no matching rule)`,
         );
-        // Notify the client so the human knows what's wrong
         const plugin = registry.getPlugin(msg.channel_id);
         if (plugin) {
           try {
             await plugin.send({
               peer_id: msg.peer_id,
-              session_id: msg.session_id,
+              conversation_id: msg.conversation_id,
               text: `[xgw] No agent configured for this channel. Check routing rules in xgw config.`,
             });
           } catch {
@@ -74,33 +70,36 @@ export class GatewayServer {
         return;
       }
 
-      // Determine channel type from config
-      const ch = config.channels.find((c) => c.id === msg.channel_id);
-      const channelType = ch?.type ?? 'unknown';
-
       this.logger.info(
         `inbound: channel=${msg.channel_id} peer=${msg.peer_id} → agent=${agentId} msg_id=${msg.id}`,
       );
 
       if (this.xarClient) {
-        // v2: send via XarClient IPC
-        const source = `external:${channelType}:${msg.channel_id}:dm:${msg.session_id}:${msg.peer_id}`;
-        await this.xarClient.sendInbound(agentId, {
+        // Build source address: external:<channel_id>:<conversation_type>:<conversation_id>:<peer_id>
+        // channel_id is already in <type>:<instance> format
+        const source = `external:${msg.channel_id}:dm:${msg.conversation_id}:${msg.peer_id}`;
+        const status = await this.xarClient.sendInbound(agentId, {
           source,
           content: msg.text,
-          reply_context: {
-            channel_type: channelType,
-            channel_id: msg.channel_id,
-            session_type: 'dm',
-            session_id: msg.session_id,
-            peer_id: msg.peer_id,
-          },
         });
-        this.logger.info(`xar send: agent=${agentId}`);
+
+        if (status === 'buffered') {
+          this.logger.warn(`xar disconnected, message buffered: agent=${agentId} peer=${msg.peer_id}`);
+          const plugin = registry.getPlugin(msg.channel_id);
+          if (plugin) {
+            try {
+              await plugin.send({
+                peer_id: msg.peer_id,
+                conversation_id: msg.conversation_id,
+                text: `[xgw] Agent backend temporarily unavailable — message queued, will be delivered when connection restores.`,
+              });
+            } catch { /* best-effort */ }
+          }
+        } else {
+          this.logger.info(`xar send: agent=${agentId}`);
+        }
       } else {
-        // v1 fallback: push via InboxWriter (for xgw send CLI / diagnostics)
-        await this.inbox.push(agentId, msg, channelType, config.agents);
-        this.logger.info(`inbox push: agent=${agentId} thread=${config.agents[agentId]?.inbox}`);
+        this.logger.warn(`No xar client configured, message dropped: agent=${agentId} peer=${msg.peer_id}`);
       }
     };
 

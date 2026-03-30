@@ -28,38 +28,23 @@ const genGateway = () =>
     port: fc.integer({ min: 1024, max: 65535 }),
   });
 
-/** Generate a valid channel config entry */
-const genChannel = (id?: string) =>
-  fc.record({
-    id: id ? fc.constant(id) : genId(),
-    type: fc.constantFrom('tui', 'telegram', 'slack', 'webchat'),
-  });
-
-/** Generate a valid agents record from a list of agent IDs */
-const genAgents = (agentIds: string[]) => {
-  const entries: Record<string, { inbox: string }> = {};
-  for (const id of agentIds) {
-    entries[id] = { inbox: `/inbox/${id}` };
-  }
-  return fc.constant(entries);
-};
+/** Channel id in <type>:<instance> format */
+const genChannelId = () =>
+  fc.tuple(fc.constantFrom('tui', 'telegram', 'slack', 'webchat'), genId())
+    .map(([type, instance]) => `${type}:${instance}`);
 
 /** Generate a complete valid Config object */
 const genValidConfig = (): fc.Arbitrary<Config> =>
   fc
     .tuple(
       genGateway(),
-      fc.array(genId(), { minLength: 1, maxLength: 5 }).chain((channelIds) => {
+      fc.array(genChannelId(), { minLength: 1, maxLength: 5 }).chain((channelIds) => {
         const uniqueChannelIds = [...new Set(channelIds)];
-        const channels = uniqueChannelIds.map((id) => ({ id, type: 'tui' as const }));
+        const channels = uniqueChannelIds.map((id) => ({ id, type: id.split(':')[0]! }));
         return fc
           .array(genId(), { minLength: 1, maxLength: 3 })
           .chain((agentIdList) => {
             const uniqueAgentIds = [...new Set(agentIdList)];
-            const agents: Record<string, { inbox: string }> = {};
-            for (const aid of uniqueAgentIds) {
-              agents[aid] = { inbox: `/inbox/${aid}` };
-            }
             // Generate routing rules that reference valid channels and agents
             const routing = uniqueChannelIds.flatMap((chId) =>
               uniqueAgentIds.slice(0, 1).map((agentId) => ({
@@ -68,15 +53,14 @@ const genValidConfig = (): fc.Arbitrary<Config> =>
                 agent: agentId,
               })),
             );
-            return fc.constant({ channels, agents, routing });
+            return fc.constant({ channels, routing });
           });
       }),
     )
-    .map(([gateway, { channels, agents, routing }]) => ({
+    .map(([gateway, { channels, routing }]) => ({
       gateway,
       channels,
       routing,
-      agents,
     }));
 
 
@@ -154,7 +138,7 @@ describe('Property 2: Config validation rejects invalid configs', () => {
     fc.oneof(
       // Missing gateway entirely
       fc.constant({
-        config: { channels: [], routing: [], agents: {} },
+        config: { channels: [], routing: [] },
         description: 'missing gateway',
       }),
       // gateway.host wrong type
@@ -177,24 +161,10 @@ describe('Property 2: Config validation rejects invalid configs', () => {
         config: { ...cfg, routing: 'not-an-array' },
         description: 'routing not array',
       })),
-      // agents not an object (is array)
-      genValidConfig().map((cfg) => ({
-        config: { ...cfg, agents: ['not', 'an', 'object'] },
-        description: 'agents is array',
-      })),
       // null config
       fc.constant({ config: null, description: 'null config' }),
       // non-object config
       fc.constant({ config: 42, description: 'non-object config' }),
-      // agent with empty inbox
-      genValidConfig().map((cfg) => {
-        const agentIds = Object.keys(cfg.agents);
-        if (agentIds.length > 0) {
-          const agents = { ...cfg.agents, [agentIds[0]!]: { inbox: '' } };
-          return { config: { ...cfg, agents }, description: 'agent with empty inbox' };
-        }
-        return { config: { ...cfg, agents: { bad: { inbox: '' } } }, description: 'agent with empty inbox' };
-      }),
       // channel entry missing id
       genValidConfig().map((cfg) => ({
         config: {
@@ -207,7 +177,7 @@ describe('Property 2: Config validation rejects invalid configs', () => {
       genValidConfig().map((cfg) => ({
         config: {
           ...cfg,
-          channels: [{ id: 'test' }],
+          channels: [{ id: 'tui:test' }],
         },
         description: 'channel missing type',
       })),
@@ -237,7 +207,7 @@ describe('Property 2: Config validation rejects invalid configs', () => {
 
   it('detects duplicate channel ids', () => {
     fc.assert(
-      fc.property(genValidConfig(), genId(), (config, dupId) => {
+      fc.property(genValidConfig(), genChannelId(), (config, dupId) => {
         const dupConfig = {
           ...config,
           channels: [
@@ -254,22 +224,6 @@ describe('Property 2: Config validation rejects invalid configs', () => {
     );
   });
 
-  it('detects routing rules referencing unknown agents', () => {
-    fc.assert(
-      fc.property(genValidConfig(), genId(), (config, unknownAgent) => {
-        // Ensure the unknown agent is truly unknown
-        if (unknownAgent in config.agents) return; // skip this case
-        const badConfig = {
-          ...config,
-          routing: [{ channel: '*', peer: '*', agent: unknownAgent }],
-        };
-        const result = validateConfig(badConfig);
-        expect(result.valid).toBe(false);
-        expect(result.errors.some((e) => e.includes('unknown agent'))).toBe(true);
-      }),
-      { numRuns: 100 },
-    );
-  });
 });
 
 
@@ -300,7 +254,6 @@ describe('Property 4: Config YAML round-trip', () => {
         expect(loaded.gateway.port).toBe(config.gateway.port);
         expect(loaded.channels).toEqual(config.channels);
         expect(loaded.routing).toEqual(config.routing);
-        expect(loaded.agents).toEqual(config.agents);
       }),
       { numRuns: 5 },
     );
@@ -315,7 +268,6 @@ describe('Property 4: Config YAML round-trip', () => {
         expect(parsed.gateway).toEqual(config.gateway);
         expect(parsed.channels).toEqual(config.channels);
         expect(parsed.routing).toEqual(config.routing);
-        expect(parsed.agents).toEqual(config.agents);
       }),
       { numRuns: 100 },
     );
@@ -375,7 +327,6 @@ describe('Property 5: Config comment preservation', () => {
         expect(reloaded.gateway).toEqual(config.gateway);
         expect(reloaded.channels).toEqual(config.channels);
         expect(reloaded.routing).toEqual(config.routing);
-        expect(reloaded.agents).toEqual(config.agents);
       }),
       { numRuns: 5 },
     );

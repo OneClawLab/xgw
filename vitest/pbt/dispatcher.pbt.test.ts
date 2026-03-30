@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fc from 'fast-check';
 import { Dispatcher } from '../../src/xar/dispatcher.js';
 import type { ChannelRegistry } from '../../src/channels/registry.js';
-import type { XarOutboundEvent, ReplyContext } from '../../src/xar/types.js';
+import type { XarOutboundEvent, OutboundTarget } from '../../src/xar/types.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -54,31 +54,33 @@ const genNonTuiChannelType = () =>
     fc.constant('webhook'),
   );
 
-function makeReplyContext(
-  channel_type: string,
-  channel_id: string,
-  session_id: string,
-  peer_id: string,
-): ReplyContext {
+function makeTarget(
+  channelId: string,
+  peerId: string,
+  conversationId: string,
+): OutboundTarget {
   return {
-    channel_type,
-    channel_id,
-    session_type: 'direct',
-    session_id,
-    peer_id,
+    channel_id: channelId,
+    peer_id: peerId,
+    conversation_id: conversationId,
   };
 }
 
-function streamStart(session_id: string, reply_context: ReplyContext): XarOutboundEvent {
-  return { type: 'stream_start', session_id, reply_context };
+/** Build a stream_id from channel_id + conversation_id + sequence */
+function buildStreamId(channelId: string, conversationId: string, seq = 1): string {
+  return `${channelId}:${conversationId}:${seq}`;
 }
 
-function streamToken(session_id: string, token: string): XarOutboundEvent {
-  return { type: 'stream_token', session_id, token };
+function streamStart(stream_id: string, target: OutboundTarget): XarOutboundEvent {
+  return { type: 'stream_start', stream_id, target };
 }
 
-function streamEnd(session_id: string): XarOutboundEvent {
-  return { type: 'stream_end', session_id };
+function streamToken(stream_id: string, token: string): XarOutboundEvent {
+  return { type: 'stream_token', stream_id, token };
+}
+
+function streamEnd(stream_id: string): XarOutboundEvent {
+  return { type: 'stream_end', stream_id };
 }
 
 // ── Property 5: stream_token 路由到正确 plugin ────────────────────────────────
@@ -94,12 +96,14 @@ describe('Property 5: stream_token 路由到正确 plugin', () => {
     () => {
       fc.assert(
         fc.property(
-          genId(), // channel_id for the session
-          genId(), // another channel_id (different plugin)
-          genId(), // session_id
+          genId(), // instance for the channel
+          genId(), // instance for the other channel
+          genId(), // conversation_id
           genId(), // peer_id
           genToken(), // token text
-          (channelId, otherChannelId, sessionId, peerId, token) => {
+          (instance, otherInstance, conversationId, peerId, token) => {
+            const channelId = `tui:${instance}`;
+            const otherChannelId = `tui:${otherInstance}`;
             fc.pre(channelId !== otherChannelId);
 
             const targetPlugin = makePlugin();
@@ -111,9 +115,10 @@ describe('Property 5: stream_token 路由到正确 plugin', () => {
             const logger = makeLogger();
             const dispatcher = new Dispatcher(registry, logger);
 
-            const ctx = makeReplyContext('tui', channelId, sessionId, peerId);
-            dispatcher.handle(streamStart(sessionId, ctx));
-            dispatcher.handle(streamToken(sessionId, token));
+            const sid = buildStreamId(channelId, conversationId);
+            const target = makeTarget(channelId, peerId, conversationId);
+            dispatcher.handle(streamStart(sid, target));
+            dispatcher.handle(streamToken(sid, token));
 
             // Flush the timer so the batch is sent
             vi.runAllTimers();
@@ -143,21 +148,23 @@ describe('Property 6: TUI 渠道 token 批量发送', () => {
     () => {
       fc.assert(
         fc.property(
-          genId(),    // channel_id
-          genId(),    // session_id
+          genId(),    // instance
+          genId(),    // conversation_id
           genId(),    // peer_id
           genTokens(), // N tokens
-          (channelId, sessionId, peerId, tokens) => {
+          (instance, conversationId, peerId, tokens) => {
+            const channelId = `tui:${instance}`;
             const plugin = makePlugin();
             const registry = makeRegistry({ [channelId]: plugin });
             const logger = makeLogger();
             const dispatcher = new Dispatcher(registry, logger);
 
-            const ctx = makeReplyContext('tui', channelId, sessionId, peerId);
-            dispatcher.handle(streamStart(sessionId, ctx));
+            const sid = buildStreamId(channelId, conversationId);
+            const target = makeTarget(channelId, peerId, conversationId);
+            dispatcher.handle(streamStart(sid, target));
 
             for (const token of tokens) {
-              dispatcher.handle(streamToken(sessionId, token));
+              dispatcher.handle(streamToken(sid, token));
             }
 
             // Before timer fires, no send yet
@@ -167,7 +174,7 @@ describe('Property 6: TUI 渠道 token 批量发送', () => {
             vi.runAllTimers();
             expect(plugin.send).toHaveBeenCalledOnce();
 
-            const calls = plugin.send.mock.calls as Array<[{ peer_id: string; session_id: string; text: string; stream: string }]>;
+            const calls = plugin.send.mock.calls as Array<[{ peer_id: string; conversation_id: string; text: string; stream: string }]>;
             const expectedText = tokens.join('');
             expect(calls[0]![0].text).toBe(expectedText);
             expect(calls[0]![0].stream).toBe('chunk');
@@ -179,7 +186,7 @@ describe('Property 6: TUI 渠道 token 批量发送', () => {
   );
 });
 
-// ── Property 7: 非 TUI 渠道 token 累积后完整发送 ─────────────────────────────
+// ── Property 7: 非 TUI 渠道 token 累積後完整发送 ─────────────────────────────
 // Feature: xgw-xar-ipc, Property 7: 非 TUI 渠道 token 累积后完整发送
 // **Validates: Requirements 4.2**
 
@@ -190,30 +197,32 @@ describe('Property 7: 非 TUI 渠道 token 累积后完整发送', () => {
       fc.assert(
         fc.property(
           genNonTuiChannelType(), // channel_type (non-TUI)
-          genId(),                // channel_id
-          genId(),                // session_id
+          genId(),                // instance
+          genId(),                // conversation_id
           genId(),                // peer_id
           genTokens(),            // N tokens
-          (channelType, channelId, sessionId, peerId, tokens) => {
+          (channelType, instance, conversationId, peerId, tokens) => {
+            const channelId = `${channelType}:${instance}`;
             const plugin = makePlugin();
             const registry = makeRegistry({ [channelId]: plugin });
             const logger = makeLogger();
             const dispatcher = new Dispatcher(registry, logger);
 
-            const ctx = makeReplyContext(channelType, channelId, sessionId, peerId);
-            dispatcher.handle(streamStart(sessionId, ctx));
+            const sid = buildStreamId(channelId, conversationId);
+            const target = makeTarget(channelId, peerId, conversationId);
+            dispatcher.handle(streamStart(sid, target));
 
             // Send all tokens — plugin.send must NOT be called yet
             for (const token of tokens) {
-              dispatcher.handle(streamToken(sessionId, token));
+              dispatcher.handle(streamToken(sid, token));
             }
             expect(plugin.send).not.toHaveBeenCalled();
 
             // stream_end — plugin.send must be called exactly once with full text
-            dispatcher.handle(streamEnd(sessionId));
+            dispatcher.handle(streamEnd(sid));
             expect(plugin.send).toHaveBeenCalledOnce();
 
-            const calls = plugin.send.mock.calls as Array<[{ peer_id: string; session_id: string; text: string }]>;
+            const calls = plugin.send.mock.calls as Array<[{ peer_id: string; conversation_id: string; text: string }]>;
             const expectedText = tokens.join('');
             expect(calls[0]![0].text).toBe(expectedText);
           },

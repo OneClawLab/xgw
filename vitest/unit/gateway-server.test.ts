@@ -5,15 +5,6 @@ import type { XarOutboundEvent } from '../../src/xar/types.js';
 import type { Config } from '../../src/config.js';
 import type { ChannelRegistry } from '../../src/channels/registry.js';
 
-// Mock InboxWriter so the v1 fallback path doesn't invoke real shell commands
-vi.mock('../../src/inbox.js', () => {
-  const pushMock = vi.fn().mockResolvedValue(undefined);
-  class InboxWriter {
-    push = pushMock;
-  }
-  return { InboxWriter };
-});
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeLogger() {
@@ -48,7 +39,6 @@ function makeConfig(): Config {
     gateway: { host: '127.0.0.1', port: 0 },
     channels: [{ id: 'ch1', type: 'tui', paired: true }],
     routing: [{ channel: 'ch1', peer: '*', agent: 'agent1' }],
-    agents: { agent1: { inbox: '/tmp/inbox' } },
   };
 }
 
@@ -117,7 +107,7 @@ describe('GatewayServer — start() with XarClient (req 6.2)', () => {
 
     // Calling it with a valid event should not throw
     expect(() =>
-      handler!({ type: 'stream_token', session_id: 's1', token: 'hello' }),
+      handler!({ type: 'stream_token', stream_id: 's1', token: 'hello' }),
     ).not.toThrow();
   });
 });
@@ -143,8 +133,13 @@ describe('GatewayServer — inbound message routing with XarClient (req 6.3)', (
       id: 'msg1',
       channel_id: 'ch1',
       peer_id: 'peer1',
-      session_id: 'sess1',
+      peer_name: null,
+      conversation_id: 'conv1',
       text: 'hello xar',
+      attachments: [],
+      reply_to: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      raw: {},
     });
 
     expect(xarClient.sendInbound).toHaveBeenCalledOnce();
@@ -152,11 +147,7 @@ describe('GatewayServer — inbound message routing with XarClient (req 6.3)', (
       'agent1',
       expect.objectContaining({
         content: 'hello xar',
-        reply_context: expect.objectContaining({
-          channel_id: 'ch1',
-          peer_id: 'peer1',
-          session_id: 'sess1',
-        }),
+        source: expect.stringContaining('ch1'),
       }),
     );
 
@@ -182,8 +173,13 @@ describe('GatewayServer — inbound message routing with XarClient (req 6.3)', (
       id: 'msg1',
       channel_id: 'ch1',
       peer_id: 'peer1',
-      session_id: 'sess1',
+      peer_name: null,
+      conversation_id: 'conv1',
       text: 'hello',
+      attachments: [],
+      reply_to: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      raw: {},
     });
 
     // xarClient.sendInbound was called — InboxWriter path was NOT taken
@@ -214,16 +210,21 @@ describe('GatewayServer — inbound message routing with XarClient (req 6.3)', (
       id: 'msg1',
       channel_id: 'ch1',
       peer_id: 'peer1',
-      session_id: 'sess1',
+      peer_name: null,
+      conversation_id: 'conv1',
       text: 'hi',
+      attachments: [],
+      reply_to: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      raw: {},
     });
 
     const call = (xarClient.sendInbound as ReturnType<typeof vi.fn>).mock.calls[0];
     const inboundMsg = call?.[1] as { source: string };
-    // source format: "external:<type>:<channel_id>:<session_type>:<session_id>:<peer_id>"
+    // source format: "external:<channel_id>:dm:<conversation_id>:<peer_id>"
     expect(inboundMsg.source).toMatch(/^external:/);
     expect(inboundMsg.source).toContain(':ch1:');
-    expect(inboundMsg.source).toContain(':sess1:');
+    expect(inboundMsg.source).toContain(':conv1:');
     expect(inboundMsg.source).toContain(':peer1');
 
     await server.stop();
@@ -231,9 +232,9 @@ describe('GatewayServer — inbound message routing with XarClient (req 6.3)', (
 });
 
 describe('GatewayServer — fallback to InboxWriter when xarClient is absent (req 6.3, 6.4)', () => {
-  it('does NOT call XarClient.sendInbound() when no xarClient is provided', async () => {
+  it('logs a warning when no xarClient is provided and message is dropped', async () => {
     const logger = makeLogger();
-    // No xarClient — v1 fallback mode
+    // No xarClient — messages are dropped
     const server = new GatewayServer(logger);
 
     let capturedOnMessage: ((msg: unknown) => Promise<void>) | undefined;
@@ -246,18 +247,23 @@ describe('GatewayServer — fallback to InboxWriter when xarClient is absent (re
 
     await server.start(makeConfig(), registry);
 
-    // Simulate inbound message — should go through InboxWriter, not XarClient
+    // Simulate inbound message — should be dropped with a warning
     await capturedOnMessage!({
       id: 'msg1',
       channel_id: 'ch1',
       peer_id: 'peer1',
-      session_id: 'sess1',
+      peer_name: null,
+      conversation_id: 'conv1',
       text: 'fallback message',
+      attachments: [],
+      reply_to: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      raw: {},
     });
 
-    // InboxWriter path: logger should have logged "inbox push:"
-    const infoLogs = (logger.info as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string);
-    expect(infoLogs.some((msg) => msg.includes('inbox push'))).toBe(true);
+    // Should log a warning about no xar client
+    const warnLogs = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string);
+    expect(warnLogs.some((msg) => msg.includes('No xar client') || msg.includes('dropped'))).toBe(true);
 
     await server.stop();
   });

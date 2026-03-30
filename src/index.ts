@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveConfigPath, loadConfig, saveConfig } from './config.js';
 import { routeAdd, routeRemove, routeList } from './commands/route.js';
-import { agentAdd, agentRemove, agentList } from './commands/agent-mgmt.js';
+import { agentList } from './commands/agent-mgmt.js';
 import { channelAdd, channelRemove, channelList } from './commands/channel-mgmt.js';
 import { pluginAdd, pluginRemove, pluginList } from './commands/plugin-mgmt.js';
 
@@ -348,44 +348,27 @@ const agentCmd = program
 
 agentCmd
   .command('add')
-  .description('Register an agent inbox')
+  .description('(Deprecated) Agent lifecycle is now managed by xar, not xgw config')
   .requiredOption('--id <id>', 'agent id')
-  .requiredOption('--inbox <path>', 'inbox thread path')
   .option('--config <path>', 'config file path')
-  .action((opts: { id: string; inbox: string; config?: string }) => {
-    try {
-      mergeConfigOpt(opts);
-      const configPath = resolveConfigPath(opts.config);
-      const config = loadConfig(configPath);
-      const updated = agentAdd(config, opts.id, opts.inbox);
-      saveConfig(configPath, updated);
-      process.stdout.write(`Agent registered: id=${opts.id} inbox=${opts.inbox}\n`);
-    } catch (err) {
-      errorExit(err instanceof Error ? err.message : String(err));
-    }
+  .action((_opts: { id: string; config?: string }) => {
+    process.stderr.write('Agent management has moved to xar. Use "xar init <id>" and "xar start <id>" instead.\n');
+    process.exit(2);
   });
 
 agentCmd
   .command('remove')
-  .description('Remove an agent registration')
+  .description('(Deprecated) Agent lifecycle is now managed by xar, not xgw config')
   .requiredOption('--id <id>', 'agent id')
   .option('--config <path>', 'config file path')
-  .action((opts: { id: string; config?: string }) => {
-    try {
-      mergeConfigOpt(opts);
-      const configPath = resolveConfigPath(opts.config);
-      const config = loadConfig(configPath);
-      const updated = agentRemove(config, opts.id);
-      saveConfig(configPath, updated);
-      process.stdout.write(`Agent removed: id=${opts.id}\n`);
-    } catch (err) {
-      errorExit(err instanceof Error ? err.message : String(err));
-    }
+  .action((_opts: { id: string; config?: string }) => {
+    process.stderr.write('Agent management has moved to xar. Use "xar stop <id>" instead.\n');
+    process.exit(2);
   });
 
 agentCmd
   .command('list')
-  .description('List all registered agents')
+  .description('List agents referenced in routing rules')
   .option('--json', 'output as JSON', false)
   .option('--config <path>', 'config file path')
   .action((opts: { json: boolean; config?: string }) => {
@@ -398,10 +381,10 @@ agentCmd
         process.stdout.write(JSON.stringify(agents, null, 2) + '\n');
       } else {
         if (agents.length === 0) {
-          process.stdout.write('No agents registered.\n');
+          process.stdout.write('No agents in routing rules.\n');
         } else {
           for (const a of agents) {
-            process.stdout.write(`id=${a.id}  inbox=${a.inbox}\n`);
+            process.stdout.write(`id=${a.id}  channels=${a.channels.join(', ')}\n`);
           }
         }
       }

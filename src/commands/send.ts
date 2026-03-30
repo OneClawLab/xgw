@@ -78,7 +78,7 @@ export async function sendCommand(opts: {
   try {
     const sendParams = {
       peer_id: opts.peer,
-      session_id: opts.session,
+      conversation_id: opts.session,
       text,
       ...(opts.replyTo != null ? { reply_to: opts.replyTo } : {}),
     };

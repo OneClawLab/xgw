@@ -14,7 +14,7 @@ export class InboxWriter {
     }
 
     // Format source address: external:<channel_type>:<channel_id>:<session_type>:<session_id>:<peer_id>
-    const source = `external:${channelType}:${message.channel_id}:dm:${message.session_id}:${message.peer_id}`;
+    const source = `external:${channelType}:${message.channel_id}:dm:${message.conversation_id}:${message.peer_id}`;
 
     // Build content JSON — exclude raw field
     const { raw, ...content } = message;

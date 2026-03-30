@@ -17,7 +17,7 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
     channel_id: 'telegram',
     peer_id: 'user42',
     peer_name: 'Alice',
-    session_id: 'sess-1',
+    conversation_id: 'conv-1',
     text: 'Hello',
     attachments: [],
     reply_to: null,
@@ -45,21 +45,21 @@ describe('InboxWriter.push', () => {
     expect(mockExec).toHaveBeenCalledWith('thread', expect.arrayContaining([
       'push',
       '--thread', '/home/.theclaw/agents/bot/inbox',
-      '--source', 'external:telegram:telegram:dm:sess-1:user42',
+      '--source', 'external:telegram:telegram:dm:conv-1:user42',
       '--type', 'message',
     ]));
   });
 
-  it('formats source as external:<channelType>:<channelId>:dm:<sessionId>:<peerId>', async () => {
+  it('formats source as external:<channelType>:<channelId>:dm:<conversationId>:<peerId>', async () => {
     const writer = new InboxWriter();
-    const msg = makeMessage({ channel_id: 'ch-99', session_id: 'sess-abc', peer_id: 'peer-xyz' });
+    const msg = makeMessage({ channel_id: 'ch-99', conversation_id: 'conv-abc', peer_id: 'peer-xyz' });
     const agents = { bot: { inbox: '/inbox' } };
 
     await writer.push('bot', msg, 'slack', agents);
 
     const args = mockExec.mock.calls[0]![1] as string[];
     const sourceIdx = args.indexOf('--source');
-    expect(args[sourceIdx + 1]).toBe('external:slack:ch-99:dm:sess-abc:peer-xyz');
+    expect(args[sourceIdx + 1]).toBe('external:slack:ch-99:dm:conv-abc:peer-xyz');
   });
 
   it('serializes message content as JSON (excluding raw field)', async () => {

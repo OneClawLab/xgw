@@ -58,6 +58,19 @@ export class GatewayServer {
         this.logger.warn(
           `routing miss: channel=${msg.channel_id} peer=${msg.peer_id} (no matching rule)`,
         );
+        // Notify the client so the human knows what's wrong
+        const plugin = registry.getPlugin(msg.channel_id);
+        if (plugin) {
+          try {
+            await plugin.send({
+              peer_id: msg.peer_id,
+              session_id: msg.session_id,
+              text: `[xgw] No agent configured for this channel. Check routing rules in xgw config.`,
+            });
+          } catch {
+            // best-effort — plugin may not be able to send
+          }
+        }
         return;
       }
 

@@ -138,8 +138,8 @@ describe('Property 18: TUI Plugin message normalization', () => {
           // channel_id and peer_id match handshake values
           expect(msg.channel_id).toBe(CHANNEL_ID);
           expect(msg.peer_id).toBe(peerId);
-          // session_id equals peer_id
-          expect(msg.session_id).toBe(peerId);
+          // conversation_id equals peer_id (TUI uses peer_id as conversation_id)
+          expect(msg.conversation_id).toBe(peerId);
           // text equals the frame text
           expect(msg.text).toBe(text);
           // attachments is empty
@@ -300,7 +300,7 @@ describe('Property 21: TUI Plugin send routes to correct peer', () => {
           const targetPeerId = peerIds[0]!;
 
           // Send a message to the target peer
-          await plugin.send({ peer_id: targetPeerId, session_id: targetPeerId, text });
+          await plugin.send({ peer_id: targetPeerId, conversation_id: targetPeerId, text });
 
           // Wait for delivery
           await new Promise((r) => setTimeout(r, 50));

@@ -1,6 +1,6 @@
 # xgw
 
-Communication gateway daemon for TheClaw v2. Routes inbound messages from external channels (TUI, Telegram, etc.) to xar agent runtime via IPC, and delivers streaming replies back to peers.
+Communication gateway daemon for TheClaw. Routes inbound messages from external channels (TUI, Telegram, etc.) to xar agent runtime via IPC, and delivers streaming replies back to peers.
 
 ## How it works
 

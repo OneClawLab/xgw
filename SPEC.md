@@ -2,7 +2,7 @@
 
 The communication gateway for TheClaw. Routes messages from external peers (via IM channels) to internal agents, and delivers agent replies back to the corresponding channels. Runs as a daemon with CLI management commands.
 
-xgw 是 TheClaw v2 架构的通信网关 daemon，负责外部渠道（Telegram、TUI、Slack 等）与 xar agent runtime 之间的消息桥接。
+xgw 是 TheClaw 架构的通信网关 daemon，负责外部渠道（Telegram、TUI、Slack 等）与 xar agent runtime 之间的消息桥接。
 
 模块类型：**CLI/Daemon**（见 [CLI-LIB-Module-Spec.md](../TheClaw/CLI-LIB-Module-Spec.md)）
 

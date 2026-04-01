@@ -114,7 +114,7 @@ export function toMessage(
   const rawText = parseMessageContent(event.message.content, event.message.message_type);
   const text = stripBotMention(rawText, event.message.mentions, botOpenId);
 
-  const sessionId =
+  const conversationId =
     event.message.chat_type === 'p2p'
       ? (event.sender.sender_id.open_id ?? '')
       : event.message.chat_id;
@@ -124,7 +124,7 @@ export function toMessage(
     channel_id: channelId,
     peer_id: event.sender.sender_id.open_id ?? '',
     peer_name: event.sender.sender_id.open_id ?? null,
-    session_id: sessionId,
+    conversation_id: conversationId,
     text,
     attachments: [],
     reply_to: event.message.parent_id ?? null,

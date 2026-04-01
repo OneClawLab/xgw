@@ -12,7 +12,7 @@ export interface Message {
   channel_id: string;
   peer_id: string;
   peer_name: string | null;
-  session_id: string;
+  conversation_id: string;
   text: string;
   attachments: Attachment[];
   reply_to: string | null;
@@ -22,7 +22,7 @@ export interface Message {
 
 export interface SendParams {
   peer_id: string;
-  session_id: string;
+  conversation_id: string;
   text: string;
   reply_to?: string;
   stream?: 'chunk' | 'end';
@@ -144,7 +144,7 @@ export class FeishuPlugin {
   private pluginConfig: FeishuPluginConfig | null = null;
   private wsConnected = false;
 
-  // One streaming card session per session_id
+  // One streaming card session per conversation_id
   private streamingSessions = new Map<string, FeishuStreamingCard>();
 
   async pair(config: ChannelConfig): Promise<PairResult> {
@@ -236,12 +236,12 @@ export class FeishuPlugin {
       throw new Error('FeishuPlugin: not started');
     }
 
-    // session_id from xar may be prefixed as "<channel_id>:<peer_id>"
-    const receiveId = params.session_id.includes(':')
-      ? params.session_id.slice(params.session_id.indexOf(':') + 1)
-      : params.session_id;
+    // conversation_id from xar may be prefixed as "<channel_id>:<peer_id>"
+    const receiveId = params.conversation_id.includes(':')
+      ? params.conversation_id.slice(params.conversation_id.indexOf(':') + 1)
+      : params.conversation_id;
 
-    const sessionKey = params.session_id;
+    const sessionKey = params.conversation_id;
 
     // ── Progress event ──────────────────────────────────────────────────────
     if (params.progress !== undefined) {

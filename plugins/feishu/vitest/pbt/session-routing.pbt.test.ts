@@ -24,12 +24,12 @@ describe('session-routing PBT', () => {
             },
           };
           const msg = toMessage(channelId, event);
-          return msg.session_id === openId;
+          return msg.conversation_id === openId;
         },
       ),
     );
 
-    // group: session_id = chat_id
+    // group: conversation_id = chat_id
     fc.assert(
       fc.property(
         fc.string({ minLength: 1 }), // openId
@@ -47,7 +47,7 @@ describe('session-routing PBT', () => {
             },
           };
           const msg = toMessage(channelId, event);
-          return msg.session_id === chatId;
+          return msg.conversation_id === chatId;
         },
       ),
     );

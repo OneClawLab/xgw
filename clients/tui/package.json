@@ -1,7 +1,7 @@
 {
   "name": "@theclawlab/xgw-tui",
   "type": "module",
-  "version": "1.0.9",
+  "version": "2.1.0",
   "description": "Terminal chat client for TheClaw",
   "bin": {
     "xgw-tui": "dist/index.js"

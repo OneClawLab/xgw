@@ -1,7 +1,7 @@
 {
   "name": "@theclawlab/xgw-plugin-tui",
   "type": "module",
-  "version": "1.0.9",
+  "version": "2.1.0",
   "description": "TUI channel plugin for xgw",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

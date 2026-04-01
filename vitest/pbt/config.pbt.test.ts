@@ -1,16 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import yaml from 'js-yaml';
-import { homedir } from 'node:os';
 import { parseXarConfig } from '../../src/config.js';
 import type { XarConfig } from '../../src/xar/types.js';
 
 // ── Generators ────────────────────────────────────────────────────────────────
-
-/** Valid Unix socket path string (non-empty, no leading tilde to avoid home expansion) */
-const genSocketPath = () =>
-  fc.string({ minLength: 1, maxLength: 60 })
-    .filter((s) => s.trim().length > 0 && !s.startsWith('~'));
 
 /** Valid TCP port: integer 1–65535 */
 const genPort = () => fc.integer({ min: 1, max: 65535 });
@@ -22,7 +16,6 @@ const genReconnectMs = () => fc.integer({ min: 1, max: 300000 });
 const genPartialRawXar = () =>
   fc.record(
     {
-      socket: genSocketPath(),
       port: genPort(),
       reconnect_interval_ms: genReconnectMs(),
     },
@@ -32,15 +25,11 @@ const genPartialRawXar = () =>
 /** Full valid XarConfig object (all fields present) */
 const genFullXarConfig = (): fc.Arbitrary<XarConfig> =>
   fc.record({
-    socket: genSocketPath(),
     port: genPort(),
     reconnect_interval_ms: genReconnectMs(),
   });
 
 // ── Property 8: XarConfig 默认值正确性 ───────────────────────────────────────
-// Feature: xgw-xar-ipc, Property 8: XarConfig 默认值正确性
-// **Validates: Requirements 5.2、5.3、5.4**
-
 describe('Property 8: XarConfig 默认值正确性', () => {
   it('省略的字段在 parseXarConfig() 后填充正确默认值', () => {
     fc.assert(
@@ -50,13 +39,6 @@ describe('Property 8: XarConfig 默认值正确性', () => {
         if (!result.ok) return;
 
         const cfg = result.value;
-
-        // Missing socket → default (expanded home path)
-        if (!('socket' in raw)) {
-          expect(cfg.socket).toBe(homedir() + '/.theclaw/xar.sock');
-        } else {
-          expect(cfg.socket).toBe(raw.socket);
-        }
 
         // Missing port → default 18792
         if (!('port' in raw)) {
@@ -80,31 +62,24 @@ describe('Property 8: XarConfig 默认值正确性', () => {
     const result = parseXarConfig(null);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.socket).toBe(homedir() + '/.theclaw/xar.sock');
     expect(result.value.port).toBe(18792);
     expect(result.value.reconnect_interval_ms).toBe(3000);
   });
 });
 
 // ── Property 9: XarConfig YAML 解析往返一致性 ────────────────────────────────
-// Feature: xgw-xar-ipc, Property 9: XarConfig YAML 解析往返一致性
-// **Validates: Requirements 5.1、5.5**
-
 describe('Property 9: XarConfig YAML 解析往返一致性', () => {
   it('任意合法 XarConfig 经 YAML 序列化再解析后字段完全等价', () => {
     fc.assert(
       fc.property(genFullXarConfig(), (original) => {
-        // Serialize to YAML then parse back
         const yamlStr = yaml.dump(original, { lineWidth: -1, noRefs: true });
         const rawParsed = yaml.load(yamlStr);
 
-        // Feed through parseXarConfig to get a typed XarConfig
         const result = parseXarConfig(rawParsed);
         expect(result.ok).toBe(true);
         if (!result.ok) return;
 
         const roundtripped = result.value;
-        expect(roundtripped.socket).toBe(original.socket);
         expect(roundtripped.port).toBe(original.port);
         expect(roundtripped.reconnect_interval_ms).toBe(original.reconnect_interval_ms);
       }),

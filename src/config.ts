@@ -174,7 +174,6 @@ export function validateConfig(config: unknown): ValidationResult {
 // ── XarConfig defaults ─────────────────────────────────────────────
 
 const XAR_DEFAULTS: XarConfig = {
-  socket: homedir() + '/.theclaw/xar.sock',
   port: 18792,
   reconnect_interval_ms: 3000,
 };
@@ -197,19 +196,6 @@ export function parseXarConfig(
 
   const x = raw as Record<string, unknown>;
 
-  // socket — expand tilde
-  let socket = XAR_DEFAULTS.socket;
-  if ('socket' in x) {
-    if (typeof x['socket'] !== 'string' || x['socket'] === '') {
-      return { ok: false, error: 'Field xar.socket has invalid type (expected non-empty string) - Fix the value in your config file' };
-    }
-    socket = x['socket'];
-  }
-  // Expand leading ~ to home directory
-  if (socket.startsWith('~/') || socket === '~') {
-    socket = socket.replace(/^~/, homedir())
-  }
-
   // port
   let port = XAR_DEFAULTS.port;
   if ('port' in x) {
@@ -228,7 +214,7 @@ export function parseXarConfig(
     reconnect_interval_ms = x['reconnect_interval_ms'];
   }
 
-  return { ok: true, value: { socket, port, reconnect_interval_ms } };
+  return { ok: true, value: { port, reconnect_interval_ms } };
 }
 
 /**

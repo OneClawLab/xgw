@@ -388,31 +388,23 @@ import { parseXarConfig } from '../../src/config.js';
 
 describe('parseXarConfig: complete xar config parsing', () => {
   it('parses a fully specified xar config', () => {
-    const raw = { socket: '/tmp/xar.sock', port: 9000, reconnect_interval_ms: 1000 };
+    const raw = { port: 9000, reconnect_interval_ms: 1000 };
     const result = parseXarConfig(raw);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.socket).toBe('/tmp/xar.sock');
     expect(result.value.port).toBe(9000);
     expect(result.value.reconnect_interval_ms).toBe(1000);
   });
 
-  it('fills default socket when omitted', () => {
-    const result = parseXarConfig({ port: 9000, reconnect_interval_ms: 1000 });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.socket).toBe(homedir() + '/.theclaw/xar.sock');
-  });
-
   it('fills default port when omitted', () => {
-    const result = parseXarConfig({ socket: '/tmp/xar.sock', reconnect_interval_ms: 1000 });
+    const result = parseXarConfig({ reconnect_interval_ms: 1000 });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.port).toBe(18792);
   });
 
   it('fills default reconnect_interval_ms when omitted', () => {
-    const result = parseXarConfig({ socket: '/tmp/xar.sock', port: 9000 });
+    const result = parseXarConfig({ port: 9000 });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.reconnect_interval_ms).toBe(3000);
@@ -422,7 +414,6 @@ describe('parseXarConfig: complete xar config parsing', () => {
     const result = parseXarConfig({});
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.socket).toBe(homedir() + '/.theclaw/xar.sock');
     expect(result.value.port).toBe(18792);
     expect(result.value.reconnect_interval_ms).toBe(3000);
   });
@@ -431,7 +422,6 @@ describe('parseXarConfig: complete xar config parsing', () => {
     const result = parseXarConfig(null);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.socket).toBe(homedir() + '/.theclaw/xar.sock');
     expect(result.value.port).toBe(18792);
     expect(result.value.reconnect_interval_ms).toBe(3000);
   });
@@ -450,20 +440,6 @@ describe('parseXarConfig: format errors return descriptive messages', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatch(/xar must be an object/i);
-  });
-
-  it('returns error when socket is empty string', () => {
-    const result = parseXarConfig({ socket: '' });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error).toMatch(/xar\.socket/i);
-  });
-
-  it('returns error when socket is a number', () => {
-    const result = parseXarConfig({ socket: 42 });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error).toMatch(/xar\.socket/i);
   });
 
   it('returns error when port is a string', () => {

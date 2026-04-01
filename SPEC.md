@@ -36,7 +36,7 @@ v2 的消息路径：
 **变化点**：
 - 入站不再调用 `thread push` CLI，改为通过 IPC 发送 `inbound_message` 给 xar
 - 出站不再等待 `agent deliver` CLI 调用，改为 xar 主动通过 IPC push streaming tokens
-- xgw 持有到 xar 的持久 IPC 连接（WebSocket over Unix socket）
+- xgw 持有到 xar 的持久 IPC 连接（WebSocket over TCP loopback）
 - `xgw send` CLI 降级为诊断/测试工具，不再是 agent 出站的必经路径
 
 **保持不变**：
@@ -124,8 +124,7 @@ gateway:
 
 # 新增：xar IPC 连接配置
 xar:
-  socket: ~/.theclaw/xar.sock     # Unix socket 路径（优先）
-  port: 18792                     # TCP fallback 端口
+  port: 18792                     # TCP 端口
   reconnect_interval_ms: 3000     # 断线重连间隔（默认 3000）
 
 channels:
@@ -146,7 +145,7 @@ routing:
 
 ```typescript
 class XarClient {
-  // 连接到 xar（优先 Unix socket，fallback TCP）
+  // 连接到 xar（TCP loopback）
   connect(): Promise<void>
 
   // 发送入站消息给 xar

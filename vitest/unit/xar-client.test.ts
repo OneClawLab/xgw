@@ -18,15 +18,8 @@ function makeLogger() {
 
 function makeMessage(content: string): InboundMessage {
   return {
-    source: 'external:tui:ch1:direct:sess1:peer1',
+    source: 'external:tui:ch1:dm:sess1:peer1',
     content,
-    reply_context: {
-      channel_type: 'tui',
-      channel_id: 'ch1',
-      session_type: 'direct',
-      session_id: 'sess1',
-      peer_id: 'peer1',
-    },
   };
 }
 
@@ -73,10 +66,9 @@ function waitForConnection(server: WebSocketServer): Promise<WsSocket> {
   });
 }
 
-/** Config that points Unix socket to a path that will never exist. */
+/** Config for XarClient tests. */
 function makeConfig(port: number): XarConfig {
   return {
-    socket: '/tmp/__xar_nonexistent_test_socket_xgw__.sock',
     port,
     reconnect_interval_ms: 50, // fast for tests
   };
@@ -84,22 +76,14 @@ function makeConfig(port: number): XarConfig {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('XarClient — Unix socket priority / TCP fallback', () => {
-  it('falls back to TCP when Unix socket is unavailable (req 1.1, 1.2)', async () => {
+describe('XarClient — TCP connection', () => {
+  it('connects via TCP (req 1.1, 1.2)', async () => {
     const { server, port } = await startWsServer();
     const logger = makeLogger();
     const client = new XarClient(makeConfig(port), logger);
 
     await client.connect();
 
-    // On Windows, Unix socket is skipped entirely — goes straight to TCP
-    // On Unix, it tries Unix socket first and warns on failure
-    if (process.platform !== 'win32') {
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Unix socket failed'),
-      );
-    }
-    // Either way, should have logged successful connection to TCP URL
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining(`ws://127.0.0.1:${port}`),
     );
@@ -238,7 +222,7 @@ describe('XarClient — close() stops reconnect (req 1.1)', () => {
     const logger = makeLogger();
     // Point at a port with nothing listening — will fail and schedule reconnect
     const client = new XarClient(
-      { socket: '/tmp/__xar_nonexistent__.sock', port: 19998, reconnect_interval_ms: 50 },
+      { port: 19998, reconnect_interval_ms: 50 },
       logger,
     );
 

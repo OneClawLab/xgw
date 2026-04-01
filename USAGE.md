@@ -28,8 +28,7 @@ gateway:
 
 # xar IPC 连接配置（v2 模式）
 xar:
-  socket: ~/.theclaw/xar.sock   # Unix socket（优先，Linux/macOS）
-  port: 18792                   # TCP fallback 端口（Windows 或 Unix socket 不可用时）
+  port: 18792                   # TCP 端口
   reconnect_interval_ms: 3000   # 断线重连间隔
 
 # 插件注册表：type → npm 包名

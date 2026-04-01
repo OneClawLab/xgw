@@ -3,7 +3,7 @@ import * as fc from 'fast-check';
 import { WebSocketServer } from 'ws';
 import type { WebSocket as WsSocket } from 'ws';
 import { XarClient } from '../../src/xar/client.js';
-import type { XarConfig, InboundMessage, ReplyContext } from '../../src/xar/types.js';
+import type { XarConfig, InboundMessage } from '../../src/xar/types.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -17,10 +17,9 @@ function makeLogger() {
   };
 }
 
-/** Config pointing Unix socket at a path that never exists (forces TCP fallback). */
+/** Config for XarClient PBT tests. */
 function makeConfig(port: number): XarConfig {
   return {
-    socket: '/tmp/__xar_pbt_nonexistent__.sock',
     port,
     reconnect_interval_ms: 50,
   };
@@ -28,15 +27,8 @@ function makeConfig(port: number): XarConfig {
 
 function makeMessage(content: string): InboundMessage {
   return {
-    source: 'external:tui:ch1:direct:sess1:peer1',
+    source: 'external:tui:ch1:dm:sess1:peer1',
     content,
-    reply_context: {
-      channel_type: 'tui',
-      channel_id: 'ch1',
-      session_type: 'direct',
-      session_id: 'sess1',
-      peer_id: 'peer1',
-    },
   };
 }
 
@@ -102,14 +94,7 @@ const genInboundMessage = () =>
     })
     .map(({ channel_type, channel_id, session_type, session_id, peer_id, content }) => {
       const source = `external:${channel_type}:${channel_id}:${session_type}:${session_id}:${peer_id}`;
-      const reply_context: ReplyContext = {
-        channel_type,
-        channel_id,
-        session_type,
-        session_id,
-        peer_id,
-      };
-      const msg: InboundMessage = { source, content, reply_context };
+      const msg: InboundMessage = { source, content };
       return msg;
     });
 
@@ -257,8 +242,6 @@ describe('Property 3: InboundMessage source 字段格式正确性', () => {
 });
 
 // ── Property 4: InboundMessage JSON 序列化往返一致性 ─────────────────────────
-// Feature: xgw-xar-ipc, Property 4: InboundMessage JSON 序列化往返一致性
-// **Validates: Requirements 2.2、2.4、2.5**
 
 describe('Property 4: InboundMessage JSON 序列化往返一致性', () => {
   it('任意合法 InboundMessage 经 JSON 序列化再反序列化后字段完全等价', () => {
@@ -267,16 +250,8 @@ describe('Property 4: InboundMessage JSON 序列化往返一致性', () => {
         const serialized = JSON.stringify(msg);
         const deserialized = JSON.parse(serialized) as InboundMessage;
 
-        // Top-level fields
         expect(deserialized.source).toBe(msg.source);
         expect(deserialized.content).toBe(msg.content);
-
-        // reply_context fields
-        expect(deserialized.reply_context.channel_type).toBe(msg.reply_context.channel_type);
-        expect(deserialized.reply_context.channel_id).toBe(msg.reply_context.channel_id);
-        expect(deserialized.reply_context.session_type).toBe(msg.reply_context.session_type);
-        expect(deserialized.reply_context.session_id).toBe(msg.reply_context.session_id);
-        expect(deserialized.reply_context.peer_id).toBe(msg.reply_context.peer_id);
       }),
       { numRuns: 100 },
     );

@@ -244,4 +244,22 @@ assert_exit0
 run_cmd $X route list
 assert_not_contains "telegram:cascade-ch"
 
+
+# ══════════════════════════════════════════════════════════════
+# 11. xgw send — error cases (no live daemon required)
+# ══════════════════════════════════════════════════════════════
+section "11. xgw send — channel not found exits non-zero"
+
+write_config
+run_cmd $X send --channel no-such-channel --peer p1 --session s1 --message "hi"
+assert_nonzero_exit
+
+section "11. xgw send — missing --message and no stdin exits non-zero"
+
+$X channel add --id tui:send-test --type tui >/dev/null 2>&1
+run_cmd $X send --channel tui:send-test --peer p1 --session s1
+assert_nonzero_exit
+
+$X channel remove --id tui:send-test >/dev/null 2>&1
+
 summary_and_exit

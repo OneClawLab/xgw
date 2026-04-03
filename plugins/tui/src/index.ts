@@ -15,12 +15,15 @@ export interface Message {
   channel_id: string;
   peer_id: string;
   peer_name: string | null;
+  conversation_type: 'dm' | 'group' | 'channel';
   conversation_id: string;
   text: string;
   attachments: Attachment[];
   reply_to: string | null;
   created_at: string;
   raw: object;
+  /** Whether the bot was explicitly mentioned. */
+  mentioned?: boolean;
 }
 
 export interface SendParams {
@@ -207,6 +210,7 @@ export class TuiPlugin {
             channel_id: this.channelId,
             peer_id: peerId,
             peer_name: peerId,
+            conversation_type: 'dm',
             conversation_id: peerId,
             text: frame['text'],
             attachments: [],

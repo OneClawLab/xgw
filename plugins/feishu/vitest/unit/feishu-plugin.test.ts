@@ -176,9 +176,9 @@ describe('FeishuPlugin event filtering', () => {
     expect(onMessage).not.toHaveBeenCalled();
   });
 
-  it('ignores group message without @bot when requireMention=true (Req 4.3)', async () => {
+  it('passes group message without @bot with mentioned=false (Req 4.3)', async () => {
     const { getHandler } = captureHandler();
-    const onMessage = vi.fn();
+    const onMessage = vi.fn().mockResolvedValue(undefined);
 
     const plugin = new FeishuPlugin();
     await plugin.start(makeConfig(), onMessage); // requireMention defaults to true
@@ -187,10 +187,14 @@ describe('FeishuPlugin event filtering', () => {
     expect(handler).not.toBeNull();
 
     await handler!(makeGroupEvent(false));
-    expect(onMessage).not.toHaveBeenCalled();
+    // Non-mentioned messages are now passed through (for context), but with mentioned=false
+    expect(onMessage).toHaveBeenCalledOnce();
+    const msg = onMessage.mock.calls[0]![0];
+    expect(msg.mentioned).toBe(false);
+    expect(msg.conversation_type).toBe('group');
   });
 
-  it('passes group message with @bot when requireMention=true (Req 4.3)', async () => {
+  it('passes group message with @bot with mentioned=true (Req 4.3)', async () => {
     const { getHandler } = captureHandler();
     const onMessage = vi.fn().mockResolvedValue(undefined);
 
@@ -202,5 +206,8 @@ describe('FeishuPlugin event filtering', () => {
 
     await handler!(makeGroupEvent(true));
     expect(onMessage).toHaveBeenCalledOnce();
+    const msg = onMessage.mock.calls[0]![0];
+    expect(msg.mentioned).toBe(true);
+    expect(msg.conversation_type).toBe('group');
   });
 });

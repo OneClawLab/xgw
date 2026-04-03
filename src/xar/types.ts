@@ -16,6 +16,9 @@ export interface InboundMessage {
   source: string;
   /** Message text content */
   content: string;
+  /** Event type for thread storage: 'message' triggers LLM, 'record' is context-only.
+   *  Determined by xgw mention gating. Defaults to 'message' if omitted. */
+  event_type?: 'message' | 'record';
 }
 
 /**

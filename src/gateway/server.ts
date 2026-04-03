@@ -77,10 +77,18 @@ export class GatewayServer {
       if (this.xarClient) {
         // Build source address: external:<channel_id>:<conversation_type>:<conversation_id>:<peer_id>
         // channel_id is already in <type>:<instance> format
-        const source = `external:${msg.channel_id}:dm:${msg.conversation_id}:${msg.peer_id}`;
+        const source = `external:${msg.channel_id}:${msg.conversation_type}:${msg.conversation_id}:${msg.peer_id}`;
+
+        // Mention gating: dm messages always trigger LLM; group messages only
+        // trigger when the bot was explicitly mentioned. Non-mentioned group
+        // messages are stored as 'record' (context only, no LLM call).
+        const eventType: 'message' | 'record' =
+          msg.mentioned === false ? 'record' : 'message';
+
         const status = await this.xarClient.sendInbound(agentId, {
           source,
           content: msg.text,
+          event_type: eventType,
         });
 
         if (status === 'buffered') {

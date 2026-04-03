@@ -12,12 +12,15 @@ export interface Message {
   channel_id: string;
   peer_id: string;
   peer_name: string | null;
+  conversation_type: 'dm' | 'group' | 'channel';
   conversation_id: string;
   text: string;
   attachments: Attachment[];
   reply_to: string | null;
   created_at: string;
   raw: object;
+  /** Whether the bot was explicitly mentioned. */
+  mentioned?: boolean;
 }
 
 export interface SendParams {
@@ -185,20 +188,17 @@ export class FeishuPlugin {
         // Ignore bot's own messages
         if (event.sender.sender_type === 'bot') return;
 
-        // Group: ignore if @bot not present when requireMention is true
-        if (
-          pluginConfig.requireMention &&
-          event.message.chat_type === 'group' &&
-          !checkBotMentioned(event, this.botOpenId)
-        ) {
-          return;
+        const isMentioned = event.message.chat_type === 'p2p' ||
+          checkBotMentioned(event, this.botOpenId);
+
+        // Acknowledge receipt with a reaction only when mentioned (best-effort)
+        // "THUMBSUP" is a verified valid Feishu emoji type
+        if (isMentioned) {
+          void addReaction(client, event.message.message_id, 'THUMBSUP');
         }
 
-        // Acknowledge receipt with a reaction immediately (best-effort)
-        // "THUMBSUP" is a verified valid Feishu emoji type
-        void addReaction(client, event.message.message_id, 'THUMBSUP');
-
         const msg = toMessage(this.channelId, event, this.botOpenId);
+        msg.mentioned = isMentioned;
         await onMessage(msg);
       },
       // Register no-op handlers to suppress SDK warnings for unhandled event types

@@ -119,11 +119,15 @@ export function toMessage(
       ? (event.sender.sender_id.open_id ?? '')
       : event.message.chat_id;
 
+  const conversationType: Message['conversation_type'] =
+    event.message.chat_type === 'p2p' ? 'dm' : 'group';
+
   return {
     id: randomUUID(),
     channel_id: channelId,
     peer_id: event.sender.sender_id.open_id ?? '',
     peer_name: event.sender.sender_id.open_id ?? null,
+    conversation_type: conversationType,
     conversation_id: conversationId,
     text,
     attachments: [],

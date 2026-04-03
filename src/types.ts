@@ -5,11 +5,14 @@ export interface Attachment {
   size?: number;
 }
 
+export type ConversationType = 'dm' | 'group' | 'channel';
+
 export interface Message {
   id: string;
   channel_id: string;
   peer_id: string;
   peer_name: string | null;
+  conversation_type: ConversationType;
   conversation_id: string;
   text: string;
   attachments: Attachment[];
@@ -17,6 +20,11 @@ export interface Message {
   /** ISO 8601 timestamp */
   created_at: string;
   raw: object;
+  /** Whether the bot was explicitly mentioned (@ or reply-to-bot).
+   *  Set by channel plugins for group conversations.
+   *  undefined or true → treat as 'message' (triggers LLM).
+   *  false → treat as 'record' (context only, no LLM trigger). */
+  mentioned?: boolean;
 }
 
 export interface SendParams {

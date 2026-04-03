@@ -257,7 +257,10 @@ assert_nonzero_exit
 section "11. xgw send — missing --message and no stdin exits non-zero"
 
 $X channel add --id tui:send-test --type tui >/dev/null 2>&1
-run_cmd $X send --channel tui:send-test --peer p1 --session s1
+# Redirect stdin from /dev/null to prevent the command from blocking on stdin read
+OUT="$TD/out_send_test.txt"
+$X send --channel tui:send-test --peer p1 --session s1 </dev/null >"$OUT" 2>/dev/null
+EC=$?
 assert_nonzero_exit
 
 $X channel remove --id tui:send-test >/dev/null 2>&1

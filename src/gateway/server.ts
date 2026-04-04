@@ -83,6 +83,7 @@ export class GatewayServer {
         // trigger when the bot was explicitly mentioned. Non-mentioned group
         // messages are stored as 'record' (context only, no LLM call).
         const eventType: 'message' | 'record' =
+          msg.conversation_type === 'dm' ? 'message' :
           msg.mentioned === false ? 'record' : 'message';
 
         const status = await this.xarClient.sendInbound(agentId, {

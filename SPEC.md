@@ -19,32 +19,6 @@ xgw 是 TheClaw 架构的通信网关 daemon，负责外部渠道（Telegram、T
 7. **身份与路由配置**：peer identity、channel identity 到 agent 的路由规则，存储在 xgw 的配置文件中（YAML），不依赖数据库。
 8. **Daemon 模式**：xgw 以 daemon 形式常驻运行，监听各渠道入站消息。
 
-## v1 → v2 核心变化
-
-v1 的消息路径：
-```
-入站: channel plugin → thread push(CLI) → notifier dispatch → agent run(CLI)
-出站: agent deliver(CLI) → xgw send(CLI) → channel plugin
-```
-
-v2 的消息路径：
-```
-入站: channel plugin → IPC → xar (内存队列)
-出站: xar → IPC → channel plugin
-```
-
-**变化点**：
-- 入站不再调用 `thread push` CLI，改为通过 IPC 发送 `inbound_message` 给 xar
-- 出站不再等待 `agent deliver` CLI 调用，改为 xar 主动通过 IPC push streaming tokens
-- xgw 持有到 xar 的持久 IPC 连接（WebSocket over TCP loopback）
-- `xgw send` CLI 降级为诊断/测试工具，不再是 agent 出站的必经路径
-
-**保持不变**：
-- Channel plugin 模型（`ChannelPlugin` 接口不变）
-- TUI plugin 和 xgw-tui client（协议不变）
-- 所有管理 CLI（start/stop/status/reload/route/channel/agent）
-- config.yaml 格式（新增 `xar` 配置节，移除 `agents` 配置节）
-
 ## 1. Role
 
 ```
@@ -243,16 +217,7 @@ xgw XarClient 收到事件
       → stream_end: 发送完整文本或结束帧
 ```
 
-## 8. GatewayServer 改造
-
-v2 的 `GatewayServer` 在 v1 基础上：
-
-1. 构造时接收 `XarClient` 实例
-2. `start()` 时启动 `XarClient.connect()`，注册出站事件处理器到 `Dispatcher`
-3. `handleInbound()` 调用 `XarClient.sendInbound()`，构造 source 地址并发送 `{ source, content }`
-4. `InboxWriter` 已废弃（inbox 概念移除）
-
-## 9. xar 不可用时的降级行为
+## 8. xar 不可用时的降级行为
 
 | 场景 | 行为 |
 |------|------|
@@ -263,9 +228,7 @@ v2 的 `GatewayServer` 在 v1 基础上：
 
 xgw 的可用性不依赖 xar——channel plugin 始终在线，只是消息无法被处理。
 
-## 10. CLI 命令
-
-与 v1 完全一致，无新增命令。
+## 9. CLI 命令
 
 ```
 xgw start [--config <path>] [--foreground]
@@ -278,10 +241,6 @@ xgw route add/remove/list
 xgw channel add/pair/remove/list/health
 xgw agent add/remove/list
 ```
-
-`xgw agent add/remove` 已废弃（agent 生命周期由 xar 管理）。`xgw agent list` 从 routing rules 中提取 agent 列表。
-
-`xgw send` 在 v2 中仍然通过 channel plugin 直接发送（不经过 xar），用于测试和诊断。
 
 ## 11. 依赖关系
 
@@ -309,14 +268,3 @@ xgw 不依赖 `pai`、`thread`、`xar`（通过 IPC 通信，不 import）。
 | `0` | 成功 |
 | `1` | 运行时错误（配置错误、channel 发送失败等） |
 | `2` | 参数/用法错误 |
-
-## 14. 实施顺序
-
-1. **新增 `src/xar/client.ts`**：XarClient，WebSocket IPC 连接，自动重连，入站发送
-2. **新增 `src/xar/dispatcher.ts`**：出站事件路由，stream_token → channel plugin
-3. **改造 `src/gateway/server.ts`**：接收 XarClient，handleInbound 改走 IPC
-4. **改造 `src/commands/start.ts`**：构造 XarClient，传入 GatewayServer
-5. **更新 `src/config.ts`**：新增 `xar` 配置节解析和校验
-6. **更新 `plugins/tui`**：支持 streaming（逐 token push），可选
-
-TUI plugin 的 streaming 支持（第 6 步）可以后做——`stream_end` 时一次性发送也能工作，只是没有流式体验。

@@ -232,7 +232,7 @@ export async function startCommand(opts: { config?: string; foreground: boolean 
       throw new Error(`Invalid xar configuration: ${xarResult.error}`);
     }
     xarClient = new XarClient(xarResult.value, logger);
-    logger.info('XarClient created (v2 IPC mode)');
+    logger.info('XarClient created');
   }
 
   // 7. Create and start gateway server (starts all paired channels)

@@ -26,7 +26,7 @@ gateway:
   host: 127.0.0.1
   port: 28211
 
-# xar IPC 连接配置（v2 模式）
+# xar IPC 连接配置
 xar:
   port: 28213                   # TCP 端口
   reconnect_interval_ms: 3000   # 断线重连间隔
@@ -50,10 +50,6 @@ channels:
     paired: true
     pair_mode: webhook
 
-agents:
-  admin:
-    inbox: ~/.theclaw/agents/admin/inbox
-
 routing:
   - channel: tui-main
     peer: "*"
@@ -66,7 +62,7 @@ routing:
 ### 字段说明
 
 - `gateway.host` / `gateway.port`：HTTP gateway 监听地址
-- `xar`：xar daemon IPC 连接配置（v2 模式，省略则不连接 xar）
+- `xar`：xar daemon IPC 连接配置（省略则不连接 xar）
 - `plugins`：channel 插件注册表，key 为 type 名，value 为 npm 包名
 - `channels`：channel 实例列表，每个 channel 需有唯一 `id` 和 `type`
 - `agents`：注册的 agent，key 为 agent id，`inbox` 为 thread 目录路径
@@ -221,7 +217,7 @@ xgw route list [--json]
 
 ## 发送消息（诊断工具）
 
-`xgw send` 在 v2 中是诊断工具，正常消息路径由 xar 通过 IPC 直接 push 到 xgw。
+`xgw send` 是诊断工具，正常消息路径由 xar 通过 IPC 直接 push 到 xgw。
 
 ```bash
 xgw send --channel <id> --peer <peer-id> --session <session-id> --message "hello"

@@ -3,7 +3,6 @@ import {
   channelAdd,
   channelRemove,
   channelList,
-  channelWritePairResult,
 } from '../../src/commands/channel-mgmt.js';
 import type { Config } from '../../src/config.js';
 
@@ -12,7 +11,6 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     gateway: { host: 'localhost', port: 8080 },
     channels: [],
     routing: [],
-    agents: {},
     ...overrides,
   };
 }
@@ -60,11 +58,9 @@ describe('channelAdd', () => {
 
   it('preserves other config fields', () => {
     const cfg = makeConfig({
-      agents: { bot: { inbox: '/inbox' } },
       routing: [{ channel: 'x', peer: '*', agent: 'bot' }],
     });
     const result = channelAdd(cfg, 'tg', 'telegram');
-    expect(result.agents).toEqual(cfg.agents);
     expect(result.routing).toEqual(cfg.routing);
   });
 });
@@ -140,61 +136,5 @@ describe('channelList', () => {
   it('treats missing paired field as false', () => {
     const cfg = makeConfig({ channels: [{ id: 'tg', type: 'telegram' }] });
     expect(channelList(cfg)[0]?.paired).toBe(false);
-  });
-});
-
-// ── channelWritePairResult ────────────────────────────────────────────────────
-
-describe('channelWritePairResult', () => {
-  const pairResult = {
-    paired: true,
-    pair_mode: 'webhook' as const,
-    pair_info: { url: 'https://example.com/hook' },
-    paired_at: '2026-01-01T00:00:00.000Z',
-  };
-
-  it('writes pair result into the channel entry', () => {
-    const cfg = makeConfig({ channels: [{ id: 'tg', type: 'telegram' }] });
-    const result = channelWritePairResult(cfg, 'tg', pairResult);
-    expect(result.channels[0]).toMatchObject({
-      id: 'tg',
-      type: 'telegram',
-      paired: true,
-      pair_mode: 'webhook',
-      pair_info: { url: 'https://example.com/hook' },
-      paired_at: '2026-01-01T00:00:00.000Z',
-    });
-  });
-
-  it('does not mutate original config', () => {
-    const cfg = makeConfig({ channels: [{ id: 'tg', type: 'telegram' }] });
-    channelWritePairResult(cfg, 'tg', pairResult);
-    expect(cfg.channels[0]?.['paired']).toBeUndefined();
-  });
-
-  it('throws when channel does not exist', () => {
-    const cfg = makeConfig();
-    expect(() => channelWritePairResult(cfg, 'ghost', pairResult)).toThrow(/ghost/);
-    expect(() => channelWritePairResult(cfg, 'ghost', pairResult)).toThrow(/not found/i);
-  });
-
-  it('only updates the target channel, not others', () => {
-    const cfg = makeConfig({
-      channels: [
-        { id: 'tg', type: 'telegram' },
-        { id: 'slack', type: 'slack' },
-      ],
-    });
-    const result = channelWritePairResult(cfg, 'tg', pairResult);
-    expect(result.channels[0]).toMatchObject({ paired: true });
-    expect(result.channels[1]?.['paired']).toBeUndefined();
-  });
-
-  it('preserves existing channel fields not in pair result', () => {
-    const cfg = makeConfig({
-      channels: [{ id: 'tg', type: 'telegram', token: 'secret' }],
-    });
-    const result = channelWritePairResult(cfg, 'tg', pairResult);
-    expect(result.channels[0]?.['token']).toBe('secret');
   });
 });

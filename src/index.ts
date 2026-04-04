@@ -97,7 +97,7 @@ program
   .description('Send a message through a channel')
   .requiredOption('--channel <id>', 'channel id')
   .requiredOption('--peer <id>', 'peer id')
-  .requiredOption('--session <id>', 'session id')
+  .requiredOption('--conversation <id>', 'conversation id')
   .option('--message <text>', 'message text (reads stdin if omitted)')
   .option('--reply-to <id>', 'reply to message id')
   .option('--config <path>', 'config file path')
@@ -105,7 +105,7 @@ program
   .action(async (opts: {
     channel: string;
     peer: string;
-    session: string;
+    conversation: string;
     message?: string;
     replyTo?: string;
     config?: string;
@@ -114,7 +114,7 @@ program
     try {
       mergeConfigOpt(opts);
       const mod = await import('./commands/send.js');
-      await mod.sendCommand(opts);
+      await mod.sendCommand({ ...opts, session: opts.conversation });
     } catch (err) {
       errorExit(err instanceof Error ? err.message : String(err));
     }
@@ -309,62 +309,11 @@ channelCmd
     }
   });
 
-channelCmd
-  .command('health')
-  .description('Check channel health')
-  .option('--id <id>', 'specific channel id')
-  .option('--json', 'output as JSON', false)
-  .option('--config <path>', 'config file path')
-  .action(async (opts: { id?: string; json: boolean; config?: string }) => {
-    try {
-      mergeConfigOpt(opts);
-      const mod = await import('./commands/status.js');
-      await mod.channelHealthCommand(opts);
-    } catch (err) {
-      errorExit(err instanceof Error ? err.message : String(err));
-    }
-  });
-
-channelCmd
-  .command('pair')
-  .description('Pair a channel (validate credentials)')
-  .requiredOption('--id <id>', 'channel id')
-  .option('--config <path>', 'config file path')
-  .action(async (opts: { id: string; config?: string }) => {
-    try {
-      mergeConfigOpt(opts);
-      const mod = await import('./commands/start.js');
-      await mod.channelPairCommand(opts);
-    } catch (err) {
-      errorExit(err instanceof Error ? err.message : String(err));
-    }
-  });
-
 // ── agent ───────────────────────────────────────────────────────────
 
 const agentCmd = program
   .command('agent')
   .description('Manage agent registrations');
-
-agentCmd
-  .command('add')
-  .description('(Deprecated) Agent lifecycle is now managed by xar, not xgw config')
-  .requiredOption('--id <id>', 'agent id')
-  .option('--config <path>', 'config file path')
-  .action((_opts: { id: string; config?: string }) => {
-    process.stderr.write('Agent management has moved to xar. Use "xar init <id>" and "xar start <id>" instead.\n');
-    process.exit(2);
-  });
-
-agentCmd
-  .command('remove')
-  .description('(Deprecated) Agent lifecycle is now managed by xar, not xgw config')
-  .requiredOption('--id <id>', 'agent id')
-  .option('--config <path>', 'config file path')
-  .action((_opts: { id: string; config?: string }) => {
-    process.stderr.write('Agent management has moved to xar. Use "xar stop <id>" instead.\n');
-    process.exit(2);
-  });
 
 agentCmd
   .command('list')

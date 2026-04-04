@@ -65,29 +65,3 @@ export async function statusCommand(opts: { config?: string; json: boolean }): P
     }
   }
 }
-
-export async function channelHealthCommand(opts: {
-  id?: string;
-  json: boolean;
-  config?: string;
-}): Promise<void> {
-  const pid = readPid();
-  const running = pid !== null && isRunning(pid);
-  if (!running) {
-    throw new Error("Daemon is not running - Start it with 'xgw start'");
-  }
-
-  // Without IPC to the running daemon, we can only report that the daemon is running.
-  // Full health check requires daemon-side query (future enhancement).
-  const result = opts.id
-    ? { [opts.id]: { ok: true, detail: 'daemon running (detailed health requires IPC)' } }
-    : { _note: 'daemon running (detailed health requires IPC)' };
-
-  if (opts.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-  } else {
-    process.stdout.write(
-      'Daemon is running. Detailed channel health requires IPC (not yet implemented).\n',
-    );
-  }
-}

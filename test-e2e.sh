@@ -50,18 +50,12 @@ assert_exit 1
 write_config
 
 # ══════════════════════════════════════════════════════════════
-# 2. agent list (add/remove deprecated)
+# 2. agent list
 # ══════════════════════════════════════════════════════════════
 section "2. agent list"
 
 run_cmd $X agent list
 assert_exit0
-
-run_cmd $X agent add --id bot1
-assert_exit 2
-
-run_cmd $X agent remove --id bot1
-assert_exit 2
 
 # ══════════════════════════════════════════════════════════════
 # 3. channel add / list / remove
@@ -251,7 +245,7 @@ assert_not_contains "telegram:cascade-ch"
 section "11. xgw send — channel not found exits non-zero"
 
 write_config
-run_cmd $X send --channel no-such-channel --peer p1 --session s1 --message "hi"
+run_cmd $X send --channel no-such-channel --peer p1 --conversation s1 --message "hi"
 assert_nonzero_exit
 
 section "11. xgw send — missing --message and no stdin exits non-zero"
@@ -259,7 +253,7 @@ section "11. xgw send — missing --message and no stdin exits non-zero"
 $X channel add --id tui:send-test --type tui >/dev/null 2>&1
 # Redirect stdin from /dev/null to prevent the command from blocking on stdin read
 OUT="$TD/out_send_test.txt"
-$X send --channel tui:send-test --peer p1 --session s1 </dev/null >"$OUT" 2>/dev/null
+$X send --channel tui:send-test --peer p1 --conversation s1 </dev/null >"$OUT" 2>/dev/null
 EC=$?
 assert_nonzero_exit
 

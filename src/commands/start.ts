@@ -9,7 +9,6 @@ import { createFileLogger, createForegroundLogger } from '../repo-utils/logger.j
 import { ChannelRegistry } from '../channels/registry.js';
 import { GatewayServer } from '../gateway/server.js';
 import { XarClient } from '../xar/client.js';
-import { channelWritePairResult } from './channel-mgmt.js';
 import type { ChannelPlugin } from '../channels/types.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -285,48 +284,4 @@ export async function startCommand(opts: { config?: string; foreground: boolean 
   } else {
     logger.info('daemon started (use "xgw stop" to terminate)');
   }
-}
-
-
-// ── channelPairCommand ─────────────────────────────────────────────
-
-export async function channelPairCommand(opts: { id: string; config?: string }): Promise<void> {
-  // 1. Resolve config path, load config
-  const configPath = resolveConfigPath(opts.config);
-  const config = loadConfig(configPath);
-
-  // 2. Find channel by id
-  const channel = config.channels.find(ch => ch.id === opts.id);
-  if (!channel) {
-    throw new Error(
-      `Channel ${opts.id} not found - Check channels with 'xgw channel list'`,
-    );
-  }
-
-  // 3. Load the plugin for that channel type
-  const plugin = await loadPluginForType(channel.type, config)
-
-  // 4. Call plugin.pair(channelConfig)
-  process.stderr.write(`Pairing channel ${opts.id} (type=${channel.type})...\n`);
-  const result = await plugin.pair(channel);
-
-  if (!result.success) {
-    throw new Error(
-      `Pairing failed for channel ${opts.id}: ${result.error ?? 'unknown error'} - Check channel configuration`,
-    );
-  }
-
-  // 5. Write pair result to config
-  const updated = channelWritePairResult(config, opts.id, {
-    paired: true,
-    pair_mode: result.pair_mode,
-    pair_info: result.pair_info,
-    paired_at: new Date().toISOString(),
-  });
-
-  // 6. Save config
-  saveConfig(configPath, updated);
-  process.stdout.write(
-    `Channel paired: id=${opts.id} mode=${result.pair_mode}\n`,
-  );
 }

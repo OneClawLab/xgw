@@ -1,7 +1,7 @@
 // IPC types for xgw ↔ xar WebSocket communication
 
 export interface XarConfig {
-  /** TCP port, default: 18792 */
+  /** TCP port, default: 28213 */
   port: number;
   /** Initial reconnect interval in ms, default: 3000 */
   reconnect_interval_ms: number;

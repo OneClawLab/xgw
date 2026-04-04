@@ -120,16 +120,16 @@ xgw/
 ```yaml
 gateway:
   host: 127.0.0.1
-  port: 18790
+  port: 28211
 
 # 新增：xar IPC 连接配置
 xar:
-  port: 18792                     # TCP 端口
+  port: 28213                     # TCP 端口
   reconnect_interval_ms: 3000     # 断线重连间隔（默认 3000）
 
 channels:
   - id: tui:default
-    port: 18791
+    port: 28212
     paired: true
     pair_mode: ws
 

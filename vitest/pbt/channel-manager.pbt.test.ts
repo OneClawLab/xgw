@@ -31,7 +31,7 @@ const genUniqueChannels = () =>
 
 /** Generate a minimal valid Config with the given channels */
 const genBaseConfig = (channels: ChannelConfig[]): Config => ({
-  gateway: { host: '127.0.0.1', port: 18790 },
+  gateway: { host: '127.0.0.1', port: 28211 },
   channels,
   routing: [],
   agents: {},

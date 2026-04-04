@@ -24,11 +24,11 @@ npm run build && npm link
 ```yaml
 gateway:
   host: 127.0.0.1
-  port: 18790
+  port: 28211
 
 # xar IPC 连接配置（v2 模式）
 xar:
-  port: 18792                   # TCP 端口
+  port: 28213                   # TCP 端口
   reconnect_interval_ms: 3000   # 断线重连间隔
 
 # 插件注册表：type → npm 包名
@@ -40,7 +40,7 @@ plugins:
 channels:
   - id: tui-main
     type: tui
-    port: 18791
+    port: 28212
     paired: true
     pair_mode: ws
 

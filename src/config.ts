@@ -174,7 +174,7 @@ export function validateConfig(config: unknown): ValidationResult {
 // ── XarConfig defaults ─────────────────────────────────────────────
 
 const XAR_DEFAULTS: XarConfig = {
-  port: 18792,
+  port: 28213,
   reconnect_interval_ms: 3000,
 };
 

@@ -23,15 +23,15 @@ mkdir -p ~/.config/xgw
 cat > ~/.config/xgw/config.yaml << 'EOF'
 gateway:
   host: 127.0.0.1
-  port: 18790
+  port: 28211
 
 xar:
-  port: 18792
+  port: 28213
 
 channels:
   - id: tui-main
     type: tui
-    port: 18791
+    port: 28212
     paired: true
     pair_mode: ws
 

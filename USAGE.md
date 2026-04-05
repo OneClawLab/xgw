@@ -182,13 +182,11 @@ xgw channel add --id <id> --type <type> [--set key=value ...]
 
 `--set` 可传入任意额外字段，例如 `--set token=abc123`。
 
-### channel remove / list / pair / health
+### channel remove / list
 
 ```bash
 xgw channel remove --id <id>
 xgw channel list [--json]
-xgw channel pair --id <id>
-xgw channel health [--id <id>] [--json]
 ```
 
 ---
@@ -196,10 +194,10 @@ xgw channel health [--id <id>] [--json]
 ## Agent 管理
 
 ```bash
-xgw agent add --id <agent-id> --inbox <thread-path>
-xgw agent remove --id <agent-id>
 xgw agent list [--json]
 ```
+
+列出路由规则中引用的所有 agent，以及每个 agent 关联的 channel。
 
 ---
 
@@ -215,14 +213,24 @@ xgw route list [--json]
 
 ---
 
-## 发送消息（诊断工具）
+## 発送消息（诊断工具）
 
 `xgw send` 是诊断工具，正常消息路径由 xar 通过 IPC 直接 push 到 xgw。
 
 ```bash
-xgw send --channel <id> --peer <peer-id> --session <session-id> --message "hello"
-echo "hello" | xgw send --channel tui-main --peer alice --session alice
+xgw send --channel <id> --peer <peer-id> --conversation <conversation-id> --message "hello"
+echo "hello" | xgw send --channel tui-main --peer alice --conversation alice
 ```
+
+**必填选项：**
+- `--channel <id>` — channel id
+- `--peer <id>` — peer id
+- `--conversation <id>` — conversation id
+
+**可选选项：**
+- `--message <text>` — 消息内容（省略则从 stdin 读取）
+- `--reply-to <id>` — 回复的消息 id
+- `--json` — JSON 输出
 
 ---
 

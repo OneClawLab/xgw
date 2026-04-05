@@ -79,17 +79,15 @@ export class GatewayServer {
         // channel_id is already in <type>:<instance> format
         const source = `external:${msg.channel_id}:${msg.conversation_type}:${msg.conversation_id}:${msg.peer_id}`;
 
-        // Mention gating: dm messages always trigger LLM; group messages only
-        // trigger when the bot was explicitly mentioned. Non-mentioned group
-        // messages are stored as 'record' (context only, no LLM call).
-        const eventType: 'message' | 'record' =
-          msg.conversation_type === 'dm' ? 'message' :
-          msg.mentioned === false ? 'record' : 'message';
-
+        // Mention gating is now handled by xar based on the agent's routing
+        // config (mode + trigger). xgw transparently passes through `mentioned`
+        // and `conversation_type` so xar can make the correct decision.
+        // Requirement 9.1
         const status = await this.xarClient.sendInbound(agentId, {
           source,
           content: msg.text,
-          event_type: eventType,
+          ...(msg.mentioned !== undefined && { mentioned: msg.mentioned }),
+          ...(msg.conversation_type !== undefined && { conversation_type: msg.conversation_type }),
         });
 
         if (status === 'buffered') {

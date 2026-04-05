@@ -231,6 +231,213 @@ describe('GatewayServer — inbound message routing with XarClient (req 6.3)', (
   });
 });
 
+describe('GatewayServer — mentioned and conversation_type passthrough (req 9.1)', () => {
+  async function setupServer() {
+    const logger = makeLogger();
+    const xarClient = makeXarClient();
+    let capturedOnMessage: ((msg: unknown) => Promise<void>) | undefined;
+    const registry = makeRegistry();
+    (registry.startAll as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_channels: unknown, onMessage: (msg: unknown) => Promise<void>) => {
+        capturedOnMessage = onMessage;
+      },
+    );
+    const server = new GatewayServer(logger, xarClient);
+    await server.start(makeConfig(), registry);
+    return { server, xarClient, capturedOnMessage: capturedOnMessage! };
+  }
+
+  function baseMsg(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'msg1',
+      channel_id: 'ch1',
+      peer_id: 'peer1',
+      peer_name: null,
+      conversation_id: 'conv1',
+      text: 'hello',
+      attachments: [],
+      reply_to: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      raw: {},
+      ...overrides,
+    };
+  }
+
+  it('passes mentioned=false through to xar for group messages', async () => {
+    const { server, xarClient, capturedOnMessage } = await setupServer();
+
+    await capturedOnMessage(baseMsg({ conversation_type: 'group', mentioned: false }));
+
+    const inbound = (xarClient.sendInbound as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(inbound['mentioned']).toBe(false);
+
+    await server.stop();
+  });
+
+  it('passes mentioned=true through to xar for group messages', async () => {
+    const { server, xarClient, capturedOnMessage } = await setupServer();
+
+    await capturedOnMessage(baseMsg({ conversation_type: 'group', mentioned: true }));
+
+    const inbound = (xarClient.sendInbound as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(inbound['mentioned']).toBe(true);
+
+    await server.stop();
+  });
+
+  it('passes conversation_type through to xar', async () => {
+    const { server, xarClient, capturedOnMessage } = await setupServer();
+
+    await capturedOnMessage(baseMsg({ conversation_type: 'group', mentioned: true }));
+
+    const inbound = (xarClient.sendInbound as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(inbound['conversation_type']).toBe('group');
+
+    await server.stop();
+  });
+
+  it('omits mentioned from InboundMessage when msg.mentioned is undefined', async () => {
+    const { server, xarClient, capturedOnMessage } = await setupServer();
+
+    await capturedOnMessage(baseMsg({ conversation_type: 'dm' }));
+
+    const inbound = (xarClient.sendInbound as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as Record<string, unknown>;
+    expect('mentioned' in inbound).toBe(false);
+
+    await server.stop();
+  });
+
+  it('does not set event_type in the InboundMessage (xar decides, not xgw)', async () => {
+    const { server, xarClient, capturedOnMessage } = await setupServer();
+
+    await capturedOnMessage(baseMsg({ conversation_type: 'group', mentioned: false }));
+
+    const inbound = (xarClient.sendInbound as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as Record<string, unknown>;
+    expect('event_type' in inbound).toBe(false);
+
+    await server.stop();
+  });
+});
+
+describe('GatewayServer — routing miss: no matching rule (req 5.4)', () => {
+  it('logs a warning and does not call sendInbound when router returns null', async () => {
+    const logger = makeLogger();
+    const xarClient = makeXarClient();
+
+    let capturedOnMessage: ((msg: unknown) => Promise<void>) | undefined;
+    const registry = makeRegistry();
+    (registry.startAll as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_channels: unknown, onMessage: (msg: unknown) => Promise<void>) => {
+        capturedOnMessage = onMessage;
+      },
+    );
+
+    // Config with NO routing rules → router always returns null
+    const configNoRouting: Config = {
+      gateway: { host: '127.0.0.1', port: 0 },
+      channels: [{ id: 'ch1', type: 'tui', paired: true }],
+      routing: [],
+    };
+
+    const server = new GatewayServer(logger, xarClient);
+    await server.start(configNoRouting, registry);
+
+    await capturedOnMessage!({
+      id: 'msg1',
+      channel_id: 'ch1',
+      peer_id: 'peer1',
+      peer_name: null,
+      conversation_id: 'conv1',
+      text: 'hello',
+      attachments: [],
+      reply_to: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      raw: {},
+    });
+
+    // sendInbound must NOT have been called
+    expect(xarClient.sendInbound).not.toHaveBeenCalled();
+
+    // A warning about routing miss must have been logged
+    const warnLogs = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string);
+    expect(warnLogs.some((m) => m.includes('routing miss') || m.includes('no matching rule') || m.includes('No agent'))).toBe(true);
+
+    await server.stop();
+  });
+
+  it('does not throw when routing miss occurs', async () => {
+    const logger = makeLogger();
+    const xarClient = makeXarClient();
+
+    let capturedOnMessage: ((msg: unknown) => Promise<void>) | undefined;
+    const registry = makeRegistry();
+    (registry.startAll as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_channels: unknown, onMessage: (msg: unknown) => Promise<void>) => {
+        capturedOnMessage = onMessage;
+      },
+    );
+
+    const configNoRouting: Config = {
+      gateway: { host: '127.0.0.1', port: 0 },
+      channels: [{ id: 'ch1', type: 'tui', paired: true }],
+      routing: [],
+    };
+
+    const server = new GatewayServer(logger, xarClient);
+    await server.start(configNoRouting, registry);
+
+    await expect(capturedOnMessage!({
+      id: 'msg1',
+      channel_id: 'ch1',
+      peer_id: 'peer1',
+      peer_name: null,
+      conversation_id: 'conv1',
+      text: 'hello',
+      attachments: [],
+      reply_to: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      raw: {},
+    })).resolves.not.toThrow();
+
+    await server.stop();
+  });
+});
+
+describe('GatewayServer — stop() cleans up resources', () => {
+  it('calls registry.stopAll() on stop()', async () => {
+    const logger = makeLogger();
+    const registry = makeRegistry();
+    const server = new GatewayServer(logger);
+
+    await server.start(makeConfig(), registry);
+    await server.stop();
+
+    expect(registry.stopAll).toHaveBeenCalledOnce();
+  });
+
+  it('calls xarClient.close() on stop() when xarClient is provided', async () => {
+    const logger = makeLogger();
+    const xarClient = makeXarClient();
+    const registry = makeRegistry();
+    const server = new GatewayServer(logger, xarClient);
+
+    await server.start(makeConfig(), registry);
+    await server.stop();
+
+    expect(xarClient.close).toHaveBeenCalledOnce();
+  });
+
+  it('stop() is idempotent — second call does not throw', async () => {
+    const logger = makeLogger();
+    const registry = makeRegistry();
+    const server = new GatewayServer(logger);
+
+    await server.start(makeConfig(), registry);
+    await server.stop();
+    await expect(server.stop()).resolves.not.toThrow();
+  });
+});
+
 describe('GatewayServer — fallback to InboxWriter when xarClient is absent (req 6.3, 6.4)', () => {
   it('logs a warning when no xarClient is provided and message is dropped', async () => {
     const logger = makeLogger();

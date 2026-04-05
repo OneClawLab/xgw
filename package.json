@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "tsup --watch",
     "build": "tsup",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:manual": "vitest run --config vitest.manual.config.ts",
     "test:coverage": "vitest run --coverage",
     "release:local": "npm run build && npm link",
     "release:public": "npm test && npm run build && npm publish --access public",

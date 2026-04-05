@@ -204,43 +204,6 @@ describe('Property 2: 缓冲区恢复后 FIFO 顺序发送', () => {
   );
 });
 
-// ── Property 3: InboundMessage source 字段格式正确性 ─────────────────────────
-// Feature: xgw-xar-ipc, Property 3: InboundMessage source 字段格式正确性
-// **Validates: Requirements 2.3**
-
-describe('Property 3: InboundMessage source 字段格式正确性', () => {
-  it('构造的 source 字段以 "external:" 开头，共 6 段，各段与输入一一对应', () => {
-    fc.assert(
-      fc.property(
-        genSegment(),
-        genSegment(),
-        genSegment(),
-        genSegment(),
-        genSegment(),
-        (channel_type, channel_id, session_type, session_id, peer_id) => {
-          const source = `external:${channel_type}:${channel_id}:${session_type}:${session_id}:${peer_id}`;
-
-          // Must start with "external:"
-          expect(source.startsWith('external:')).toBe(true);
-
-          // Must have exactly 6 colon-separated segments
-          const segments = source.split(':');
-          expect(segments.length).toBe(6);
-
-          // Each segment must match the input
-          expect(segments[0]).toBe('external');
-          expect(segments[1]).toBe(channel_type);
-          expect(segments[2]).toBe(channel_id);
-          expect(segments[3]).toBe(session_type);
-          expect(segments[4]).toBe(session_id);
-          expect(segments[5]).toBe(peer_id);
-        },
-      ),
-      { numRuns: 100 },
-    );
-  });
-});
-
 // ── Property 4: InboundMessage JSON 序列化往返一致性 ─────────────────────────
 
 describe('Property 4: InboundMessage JSON 序列化往返一致性', () => {

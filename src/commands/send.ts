@@ -1,44 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolveConfigPath, loadConfig } from '../config.js';
-import type { ChannelPlugin } from '../channels/types.js';
-
-/**
- * Attempt to dynamically load a channel plugin by type name.
- * Same pattern as start.ts — convention: plugins/<type>/dist/index.js
- */
-async function loadPluginForType(type: string): Promise<ChannelPlugin> {
-  const pluginPaths: Record<string, string> = {
-    tui: '../../../plugins/tui/dist/index.js',
-  };
-
-  const modulePath = pluginPaths[type];
-  if (!modulePath) {
-    throw new Error(
-      `No plugin found for channel type ${type} - Install the plugin or check the type name`,
-    );
-  }
-
-  try {
-    const mod = (await import(modulePath)) as Record<string, unknown>;
-    if (typeof mod['default'] === 'function') {
-      return new (mod['default'] as new () => ChannelPlugin)();
-    }
-    if (typeof mod['createPlugin'] === 'function') {
-      return (mod['createPlugin'] as () => ChannelPlugin)();
-    }
-    if (typeof mod['TuiPlugin'] === 'function') {
-      return new (mod['TuiPlugin'] as new () => ChannelPlugin)();
-    }
-    throw new Error(
-      `Plugin module for type "${type}" has no recognized export`,
-    );
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('No plugin found')) throw err;
-    throw new Error(
-      `Failed to load plugin for channel type ${type} - ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-}
+import { loadPluginForType } from '../gateway/plugin-loader.js';
 
 export async function sendCommand(opts: {
   channel: string;

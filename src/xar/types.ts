@@ -17,8 +17,21 @@ export interface InboundMessage {
   /** Message text content */
   content: string;
   /** Event type for thread storage: 'message' triggers LLM, 'record' is context-only.
-   *  Determined by xgw mention gating. Defaults to 'message' if omitted. */
+   *  Determined by xar based on routing.mode + routing.trigger. Defaults to 'message' if omitted. */
   event_type?: 'message' | 'record';
+  /**
+   * Whether the agent was mentioned in this message.
+   * Passed through transparently from the channel plugin; xar uses this
+   * (together with routing.mode / routing.trigger) to decide the effective event_type.
+   * Requirement 9.1
+   */
+  mentioned?: boolean;
+  /**
+   * Conversation type from the originating channel (e.g. 'dm', 'group').
+   * Passed through transparently so xar can apply mode-specific routing logic.
+   * Requirement 9.1
+   */
+  conversation_type?: string;
 }
 
 /**

@@ -187,28 +187,16 @@ export class Dispatcher {
       }
 
       case 'stream_thinking': {
-        const { stream_id, delta } = event;
-        const state = this.streams.get(stream_id);
+        const state = this.streams.get(event.stream_id);
         if (!state) return;
-        if (state.streaming) {
-          const plugin = this.registry.getPlugin(state.channelId);
-          if (plugin) {
-            this.safeSend(plugin, { peer_id: state.peerId, conversation_id: state.conversationId, text: delta, progress: 'thinking' }, state.channelId);
-          }
-        }
+        this.sendProgressIfStreaming(state, event.delta, 'thinking');
         break;
       }
 
       case 'stream_tool_call': {
-        const { stream_id, tool_call } = event;
-        const state = this.streams.get(stream_id);
+        const state = this.streams.get(event.stream_id);
         if (!state) return;
-        if (state.streaming) {
-          const plugin = this.registry.getPlugin(state.channelId);
-          if (plugin) {
-            this.safeSend(plugin, { peer_id: state.peerId, conversation_id: state.conversationId, text: JSON.stringify(tool_call), progress: 'tool_call' }, state.channelId);
-          }
-        }
+        this.sendProgressIfStreaming(state, JSON.stringify(event.tool_call), 'tool_call');
         break;
       }
 
@@ -229,60 +217,47 @@ export class Dispatcher {
         break;
       }
 
-      case 'stream_ctx_usage': {
-        const { stream_id, ctx_usage } = event;
-        const state = this.streams.get(stream_id);
-        if (!state) {
-          const buf = this.preStreamBuffer.get(stream_id) ?? [];
-          buf.push(event);
-          this.preStreamBuffer.set(stream_id, buf);
-          break;
-        }
-        if (state.streaming) {
-          const plugin = this.registry.getPlugin(state.channelId);
-          if (plugin) {
-            this.safeSend(plugin, { peer_id: state.peerId, conversation_id: state.conversationId, text: JSON.stringify(ctx_usage), progress: 'ctx_usage' }, state.channelId);
-          }
-        }
+      case 'stream_ctx_usage':
+        this.handleBufferedProgressEvent(event.stream_id, event, JSON.stringify(event.ctx_usage), 'ctx_usage');
         break;
-      }
 
-      case 'stream_compact_start': {
-        const { stream_id, compact_start } = event;
-        const state = this.streams.get(stream_id);
-        if (!state) {
-          const buf = this.preStreamBuffer.get(stream_id) ?? [];
-          buf.push(event);
-          this.preStreamBuffer.set(stream_id, buf);
-          break;
-        }
-        if (state.streaming) {
-          const plugin = this.registry.getPlugin(state.channelId);
-          if (plugin) {
-            this.safeSend(plugin, { peer_id: state.peerId, conversation_id: state.conversationId, text: JSON.stringify(compact_start), progress: 'compact_start' }, state.channelId);
-          }
-        }
+      case 'stream_compact_start':
+        this.handleBufferedProgressEvent(event.stream_id, event, JSON.stringify(event.compact_start), 'compact_start');
         break;
-      }
 
-      case 'stream_compact_end': {
-        const { stream_id, compact_end } = event;
-        const state = this.streams.get(stream_id);
-        if (!state) {
-          const buf = this.preStreamBuffer.get(stream_id) ?? [];
-          buf.push(event);
-          this.preStreamBuffer.set(stream_id, buf);
-          break;
-        }
-        if (state.streaming) {
-          const plugin = this.registry.getPlugin(state.channelId);
-          if (plugin) {
-            this.safeSend(plugin, { peer_id: state.peerId, conversation_id: state.conversationId, text: JSON.stringify(compact_end), progress: 'compact_end' }, state.channelId);
-          }
-        }
+      case 'stream_compact_end':
+        this.handleBufferedProgressEvent(event.stream_id, event, JSON.stringify(event.compact_end), 'compact_end');
         break;
-      }
     }
+  }
+
+  /** Send a progress event to the plugin if the stream is in streaming mode. */
+  private sendProgressIfStreaming(state: StreamState, text: string, progress: NonNullable<import('../types.js').SendParams['progress']>): void {
+    if (!state.streaming) return;
+    const plugin = this.registry.getPlugin(state.channelId);
+    if (plugin) {
+      this.safeSend(plugin, { peer_id: state.peerId, conversation_id: state.conversationId, text, progress }, state.channelId);
+    }
+  }
+
+  /**
+   * Handle a progress event that may arrive before stream_start.
+   * Buffers the event if the stream is not yet known; otherwise delegates to sendProgressIfStreaming.
+   */
+  private handleBufferedProgressEvent(
+    streamId: string,
+    event: XarOutboundEvent,
+    text: string,
+    progress: NonNullable<import('../types.js').SendParams['progress']>,
+  ): void {
+    const state = this.streams.get(streamId);
+    if (!state) {
+      const buf = this.preStreamBuffer.get(streamId) ?? [];
+      buf.push(event);
+      this.preStreamBuffer.set(streamId, buf);
+      return;
+    }
+    this.sendProgressIfStreaming(state, text, progress);
   }
 
   private flushTuiBuffer(state: StreamState): void {

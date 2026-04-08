@@ -204,6 +204,7 @@ export class FeishuPlugin {
       // Register no-op handlers to suppress SDK warnings for unhandled event types
       'im.message.reaction.created_v1': async () => {},
       'im.message.message_read_v1': async () => {},
+      'im.chat.access_event.bot_p2p_chat_entered_v1': async () => {},
     });
 
     const wsClient = createWSClient(pluginConfig, dispatcher);

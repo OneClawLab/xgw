@@ -67,7 +67,7 @@ export type XarOutboundEvent =
   | { type: 'stream_token';         stream_id: string; token: string }
   | { type: 'stream_thinking';      stream_id: string; delta: string }
   | { type: 'stream_tool_call';     stream_id: string; tool_call: unknown }
-  | { type: 'stream_tool_result';   stream_id: string; tool_result: unknown }
+  | { type: 'stream_tool_result';   stream_id: string; tool_name: string; tool_result: unknown }
   | { type: 'stream_end';           stream_id: string }
   | { type: 'stream_error';         stream_id: string; error: string }
   | { type: 'stream_ctx_usage';     stream_id: string; ctx_usage: CtxUsage }

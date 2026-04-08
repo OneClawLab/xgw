@@ -201,13 +201,13 @@ export class Dispatcher {
       }
 
       case 'stream_tool_result': {
-        const { stream_id, tool_result } = event;
+        const { stream_id, tool_name, tool_result } = event;
         const state = this.streams.get(stream_id);
         if (!state) return;
         if (state.streaming) {
           const plugin = this.registry.getPlugin(state.channelId);
           if (plugin) {
-            const p = plugin.send({ peer_id: state.peerId, conversation_id: state.conversationId, text: JSON.stringify(tool_result), progress: 'tool_result' })
+            const p = plugin.send({ peer_id: state.peerId, conversation_id: state.conversationId, text: JSON.stringify({ tool_name, tool_result }), progress: 'tool_result' })
               .catch((err: unknown) => {
                 this.logger.error(`send failed: channel=${state.channelId} err=${err instanceof Error ? err.message : String(err)}`);
               });

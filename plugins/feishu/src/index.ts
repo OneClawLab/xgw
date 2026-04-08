@@ -343,25 +343,68 @@ export class FeishuPlugin {
   private _formatToolCall(rawText: string): string {
     try {
       const obj = JSON.parse(rawText) as Record<string, unknown>;
+      const name = typeof obj['name'] === 'string' ? obj['name'] : '';
       const args = (typeof obj['arguments'] === 'object' && obj['arguments'] !== null)
         ? obj['arguments'] as Record<string, unknown>
         : obj; // fallback: treat obj itself as args
-      const comment = typeof args['comment'] === 'string' ? args['comment'].trim() : '';
-      const command = typeof args['command'] === 'string' ? args['command'].trim() : '';
-      const cwd = typeof args['cwd'] === 'string' ? args['cwd'].trim() : '';
-      const timeout = args['timeout_seconds'] !== undefined ? String(args['timeout_seconds']) : '';
 
-      const lines: string[] = [];
-      lines.push(`🔧 ${comment || '执行命令'}`);
-      if (command) {
-        const cmdTruncated = command.length > 120 ? `${command.slice(0, 120)}…` : command;
-        lines.push(`cmd: ${cmdTruncated}`);
+      const trunc = (s: string, max: number): string =>
+        s.length > max ? `${s.slice(0, max)}…` : s;
+
+      switch (name) {
+        case 'bash_exec': {
+          const comment = typeof args['comment'] === 'string' ? args['comment'].trim() : '';
+          const command = typeof args['command'] === 'string' ? args['command'].trim() : '';
+          const cwd = typeof args['cwd'] === 'string' ? args['cwd'].trim() : '';
+          const timeout = args['timeout_seconds'] !== undefined ? String(args['timeout_seconds']) : '';
+          const lines: string[] = [];
+          lines.push(`🔧 ${comment || '执行命令'}`);
+          if (command) lines.push(`cmd: ${trunc(command, 120)}`);
+          const meta: string[] = [];
+          if (cwd) meta.push(`cwd: ${cwd}`);
+          if (timeout) meta.push(`timeout: ${timeout}s`);
+          if (meta.length > 0) lines.push(meta.join('  '));
+          return lines.join('\n');
+        }
+        case 'send_message': {
+          const target = typeof args['target'] === 'string' ? args['target'] : '?';
+          const content = typeof args['content'] === 'string' ? args['content'].trim() : '';
+          const lines = [`📨 send_message → ${target}`];
+          if (content) lines.push(trunc(content, 100));
+          return lines.join('\n');
+        }
+        case 'create_agent_task': {
+          const subtasks = Array.isArray(args['subtasks']) ? args['subtasks'] as Array<Record<string, unknown>> : [];
+          const waitAll = args['wait_all'] === true;
+          const lines = [`🤝 create_agent_task (${subtasks.length} 个子任务, wait_all=${waitAll})`];
+          for (const st of subtasks) {
+            const worker = typeof st['worker'] === 'string' ? st['worker'] : '?';
+            const instr = typeof st['instruction'] === 'string' ? trunc(st['instruction'].trim(), 80) : '';
+            lines.push(`  ${worker}: ${instr}`);
+          }
+          return lines.join('\n');
+        }
+        case 'cancel_agent_task': {
+          const taskId = typeof args['task_id'] === 'string' ? args['task_id'] : '?';
+          return `🚫 cancel_agent_task task_id=${taskId}`;
+        }
+        case 'steer_agent_task': {
+          const taskId = typeof args['task_id'] === 'string' ? args['task_id'] : '?';
+          const worker = typeof args['worker'] === 'string' ? args['worker'] : '?';
+          const newInstr = typeof args['new_instruction'] === 'string' ? trunc(args['new_instruction'].trim(), 80) : '';
+          const lines = [`🎯 steer_agent_task task_id=${taskId} worker=${worker}`];
+          if (newInstr) lines.push(`  ${newInstr}`);
+          return lines.join('\n');
+        }
+        case 'spawn_adhoc_task': {
+          const instruction = typeof args['instruction'] === 'string' ? trunc(args['instruction'].trim(), 100) : '';
+          return `⚡ spawn_adhoc_task: ${instruction}`;
+        }
+        default: {
+          const label = name || '工具调用';
+          return `🔧 ${label}(${trunc(JSON.stringify(args), 100)})`;
+        }
       }
-      const meta: string[] = [];
-      if (cwd) meta.push(`cwd: ${cwd}`);
-      if (timeout) meta.push(`timeout: ${timeout}s`);
-      if (meta.length > 0) lines.push(meta.join('  '));
-      return lines.join('\n');
     } catch {
       return `🔧 ${rawText.slice(0, 100)}`;
     }
@@ -369,16 +412,56 @@ export class FeishuPlugin {
 
   private _formatToolResult(rawText: string): string {
     try {
-      const obj = JSON.parse(rawText) as Record<string, unknown>;
-      const exitCode = obj['exitCode'] ?? obj['exit_code'];
-      const stdout = typeof obj['stdout'] === 'string' ? obj['stdout'].trim() : '';
-      const stderr = typeof obj['stderr'] === 'string' ? obj['stderr'].trim() : '';
-      const isSuccess = exitCode === 0 || exitCode === undefined;
-      const icon = isSuccess ? '✅' : '❌';
-      const content = [stdout, stderr].filter(s => s).join(' | ');
-      if (!content) return `${icon} (无输出)`;
-      const truncated = content.length > 200 ? `${content.slice(0, 200)}…` : content;
-      return `${icon} ${truncated.replace(/\n+/g, ' ↵ ')}`;
+      const envelope = JSON.parse(rawText) as { tool_name: string; tool_result: unknown };
+      const name = typeof envelope.tool_name === 'string' ? envelope.tool_name : '';
+      const obj = (typeof envelope.tool_result === 'object' && envelope.tool_result !== null)
+        ? envelope.tool_result as Record<string, unknown>
+        : {};
+
+      const trunc = (s: string, max: number): string =>
+        s.length > max ? `${s.slice(0, max)}…` : s;
+
+      switch (name) {
+        case 'bash_exec': {
+          const exitCode = obj['exitCode'] ?? obj['exit_code'];
+          const stdout = typeof obj['stdout'] === 'string' ? obj['stdout'].trim() : '';
+          const stderr = typeof obj['stderr'] === 'string' ? obj['stderr'].trim() : '';
+          const isSuccess = exitCode === 0 || exitCode === undefined;
+          const icon = isSuccess ? '✅' : '❌';
+          const content = [stdout, stderr].filter(s => s).join(' | ');
+          if (!content) return `${icon} (无输出)`;
+          return `${icon} ${trunc(content, 200).replace(/\n+/g, ' ↵ ')}`;
+        }
+        case 'send_message': {
+          const status = typeof obj['status'] === 'string' ? obj['status'] : '';
+          const target = typeof obj['target'] === 'string' ? ` → ${obj['target']}` : '';
+          const msg = typeof obj['message'] === 'string' ? `: ${obj['message']}` : '';
+          const isOk = status === 'delivered' || status === 'ok';
+          return `${isOk ? '✅' : '❌'} ${status}${target}${msg}`;
+        }
+        case 'create_agent_task': {
+          const taskId = typeof obj['task_id'] === 'string' ? obj['task_id'] : '?';
+          const status = typeof obj['status'] === 'string' ? obj['status'] : '';
+          return `✅ 任务已创建: ${taskId} (${status})`;
+        }
+        case 'cancel_agent_task': {
+          return obj['cancelled'] === true ? '✅ 任务已取消' : '❌ 取消失败';
+        }
+        case 'steer_agent_task': {
+          const steered = obj['steered'] === true;
+          const msg = typeof obj['message'] === 'string' ? `: ${obj['message']}` : '';
+          return `${steered ? '✅' : '❌'} ${steered ? '任务已调整' : '调整失败'}${msg}`;
+        }
+        case 'spawn_adhoc_task': {
+          const content = typeof obj['result'] === 'string' ? obj['result'].trim() : '';
+          if (!content) return '✅ (无输出)';
+          return `✅ ${trunc(content, 200).replace(/\n+/g, ' ↵ ')}`;
+        }
+        default: {
+          const raw = JSON.stringify(envelope.tool_result);
+          return `📋 ${trunc(raw, 100)}`;
+        }
+      }
     } catch {
       const truncated = rawText.length > 100 ? `${rawText.slice(0, 100)}…` : rawText;
       return `📋 ${truncated}`;

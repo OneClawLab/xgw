@@ -50,41 +50,126 @@ function renderToolCall(data: unknown): void {
   }
   const d = data as Record<string, unknown>;
   const name = typeof d['name'] === 'string' ? d['name'] : 'unknown';
-  if (name !== 'bash_exec') {
-    process.stderr.write(`  tool_call: ${name}(${JSON.stringify(d['arguments'] ?? {})})\n`);
-    return;
-  }
   const args = (typeof d['arguments'] === 'object' && d['arguments'] !== null)
     ? d['arguments'] as Record<string, unknown>
     : {};
-  const comment = typeof args['comment'] === 'string' ? args['comment'].trim() : '';
-  const command = typeof args['command'] === 'string' ? args['command'].trim() : '';
-  const cwd = typeof args['cwd'] === 'string' ? args['cwd'] : '';
-  const timeout = args['timeout_seconds'] !== undefined ? String(args['timeout_seconds']) : '';
 
-  process.stderr.write(`  ▶ ${comment || 'bash_exec'}\n`);
-  if (command) process.stderr.write(renderInlineOrBlock(`${INDENT}command:`, command, `${INDENT}  `));
-  const meta: string[] = [];
-  if (cwd) meta.push(`cwd: ${cwd}`);
-  if (timeout) meta.push(`timeout: ${timeout}s`);
-  if (meta.length > 0) process.stderr.write(`${INDENT}${meta.join('  ')}\n`);
+  switch (name) {
+    case 'bash_exec': {
+      const comment = typeof args['comment'] === 'string' ? args['comment'].trim() : '';
+      const command = typeof args['command'] === 'string' ? args['command'].trim() : '';
+      const cwd = typeof args['cwd'] === 'string' ? args['cwd'] : '';
+      const timeout = args['timeout_seconds'] !== undefined ? String(args['timeout_seconds']) : '';
+      process.stderr.write(`  ▶ ${comment || 'bash_exec'}\n`);
+      if (command) process.stderr.write(renderInlineOrBlock(`${INDENT}command:`, command, `${INDENT}  `));
+      const meta: string[] = [];
+      if (cwd) meta.push(`cwd: ${cwd}`);
+      if (timeout) meta.push(`timeout: ${timeout}s`);
+      if (meta.length > 0) process.stderr.write(`${INDENT}${meta.join('  ')}\n`);
+      break;
+    }
+    case 'send_message': {
+      const target = typeof args['target'] === 'string' ? args['target'] : '';
+      const content = typeof args['content'] === 'string' ? args['content'].trim() : '';
+      process.stderr.write(`  ▶ send_message → ${target}\n`);
+      if (content) process.stderr.write(renderInlineOrBlock(`${INDENT}content:`, content, `${INDENT}  `));
+      break;
+    }
+    case 'create_agent_task': {
+      const subtasks = Array.isArray(args['subtasks']) ? args['subtasks'] as Array<Record<string, unknown>> : [];
+      const waitAll = args['wait_all'] === true;
+      process.stderr.write(`  ▶ create_agent_task (${subtasks.length} subtask${subtasks.length !== 1 ? 's' : ''}, wait_all=${waitAll})\n`);
+      for (const st of subtasks) {
+        const worker = typeof st['worker'] === 'string' ? st['worker'] : '?';
+        const instr = typeof st['instruction'] === 'string' ? st['instruction'].trim() : '';
+        process.stderr.write(renderInlineOrBlock(`${INDENT}${worker}:`, instr, `${INDENT}  `));
+      }
+      break;
+    }
+    case 'cancel_agent_task': {
+      const taskId = typeof args['task_id'] === 'string' ? args['task_id'] : '?';
+      process.stderr.write(`  ▶ cancel_agent_task task_id=${taskId}\n`);
+      break;
+    }
+    case 'steer_agent_task': {
+      const taskId = typeof args['task_id'] === 'string' ? args['task_id'] : '?';
+      const worker = typeof args['worker'] === 'string' ? args['worker'] : '?';
+      const newInstr = typeof args['new_instruction'] === 'string' ? args['new_instruction'].trim() : '';
+      process.stderr.write(`  ▶ steer_agent_task task_id=${taskId} worker=${worker}\n`);
+      if (newInstr) process.stderr.write(renderInlineOrBlock(`${INDENT}instruction:`, newInstr, `${INDENT}  `));
+      break;
+    }
+    case 'spawn_adhoc_task': {
+      const instruction = typeof args['instruction'] === 'string' ? args['instruction'].trim() : '';
+      const context = typeof args['context'] === 'string' ? args['context'].trim() : '';
+      process.stderr.write(`  ▶ spawn_adhoc_task\n`);
+      if (instruction) process.stderr.write(renderInlineOrBlock(`${INDENT}instruction:`, instruction, `${INDENT}  `));
+      if (context) process.stderr.write(renderInlineOrBlock(`${INDENT}context:`, context, `${INDENT}  `));
+      break;
+    }
+    default:
+      process.stderr.write(`  tool_call: ${name}(${JSON.stringify(args)})\n`);
+  }
 }
 
-function renderToolResult(data: unknown): void {
+function renderToolResult(name: string, data: unknown): void {
   if (typeof data !== 'object' || data === null) {
     process.stderr.write(`  ✓ ${truncate(JSON.stringify(data), LINE_MAX)}\n`);
     return;
   }
   const d = data as Record<string, unknown>;
-  const exitCode = d['exitCode'] !== undefined ? d['exitCode'] : d['exit_code'];
-  const stdout = typeof d['stdout'] === 'string' ? d['stdout'] : '';
-  const stderr = typeof d['stderr'] === 'string' ? d['stderr'] : '';
-  const errMsg = typeof d['error'] === 'string' ? d['error'] : '';
-  const isSuccess = exitCode === 0 || exitCode === undefined;
-  const content = errMsg || [stdout, stderr].filter(s => s.trim()).join('\n').trim();
-  const prefix = `  ${isSuccess ? '✓' : '✗'}`;
-  if (!content) { process.stderr.write(`${prefix} (no output)\n`); return; }
-  process.stderr.write(renderInlineOrBlock(prefix, content, INDENT));
+
+  switch (name) {
+    case 'bash_exec': {
+      const exitCode = d['exitCode'] !== undefined ? d['exitCode'] : d['exit_code'];
+      const stdout = typeof d['stdout'] === 'string' ? d['stdout'] : '';
+      const stderr = typeof d['stderr'] === 'string' ? d['stderr'] : '';
+      const errMsg = typeof d['error'] === 'string' ? d['error'] : '';
+      const isSuccess = exitCode === 0 || exitCode === undefined;
+      const content = errMsg || [stdout, stderr].filter(s => s.trim()).join('\n').trim();
+      const prefix = `  ${isSuccess ? '✓' : '✗'}`;
+      if (!content) { process.stderr.write(`${prefix} (no output)\n`); return; }
+      process.stderr.write(renderInlineOrBlock(prefix, content, INDENT));
+      break;
+    }
+    case 'send_message': {
+      const status = typeof d['status'] === 'string' ? d['status'] : '';
+      const target = typeof d['target'] === 'string' ? ` → ${d['target']}` : '';
+      const msg = typeof d['message'] === 'string' ? `: ${d['message']}` : '';
+      const isOk = status === 'delivered' || status === 'ok';
+      process.stderr.write(`  ${isOk ? '✓' : '✗'} ${status}${target}${msg}\n`);
+      break;
+    }
+    case 'create_agent_task': {
+      const taskId = typeof d['task_id'] === 'string' ? d['task_id'] : '?';
+      const status = typeof d['status'] === 'string' ? d['status'] : '';
+      process.stderr.write(`  ✓ task created: ${taskId} (${status})\n`);
+      break;
+    }
+    case 'cancel_agent_task': {
+      const cancelled = d['cancelled'] === true;
+      process.stderr.write(`  ${cancelled ? '✓' : '✗'} task ${cancelled ? 'cancelled' : 'cancel failed'}\n`);
+      break;
+    }
+    case 'steer_agent_task': {
+      const steered = d['steered'] === true;
+      const msg = typeof d['message'] === 'string' ? `: ${d['message']}` : '';
+      process.stderr.write(`  ${steered ? '✓' : '✗'} task ${steered ? 'steered' : 'steer failed'}${msg}\n`);
+      break;
+    }
+    case 'spawn_adhoc_task': {
+      const content = typeof d['result'] === 'string' ? d['result'].trim() : '';
+      if (!content) { process.stderr.write(`  ✓ (no output)\n`); return; }
+      process.stderr.write(renderInlineOrBlock('  ✓', content, INDENT));
+      break;
+    }
+    default: {
+      const errMsg = typeof d['error'] === 'string' ? d['error'] : '';
+      const isSuccess = !errMsg;
+      const content = errMsg || truncate(JSON.stringify(d), LINE_MAX);
+      process.stderr.write(`  ${isSuccess ? '✓' : '✗'} ${content}\n`);
+    }
+  }
 }
 
 // ── Core client logic ─────────────────────────────────────────────────────────
@@ -151,7 +236,10 @@ function createClient(opts: ClientOptions): void {
           } else if (frame.kind === 'tool_call') {
             try { renderToolCall(JSON.parse(frame.text)); } catch { process.stderr.write(`  tool_call: ${frame.text}\n`); }
           } else if (frame.kind === 'tool_result') {
-            try { renderToolResult(JSON.parse(frame.text)); } catch { process.stderr.write(`  tool_result: ${frame.text}\n`); }
+            try {
+              const envelope = JSON.parse(frame.text) as { tool_name: string; tool_result: unknown };
+              renderToolResult(envelope.tool_name, envelope.tool_result);
+            } catch { process.stderr.write(`  tool_result: ${frame.text}\n`); }
           } else if (frame.kind === 'ctx_usage') {
             try {
               const u = JSON.parse(frame.text) as { total_tokens: number; budget_tokens: number; pct: number };

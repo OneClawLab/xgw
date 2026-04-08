@@ -79,6 +79,7 @@ export async function createFileLogger(
   }
 
   function writeLine(level: LogLevel, message: string): void {
+    if (stream.destroyed || stream.writableEnded) return;
     if (currentLines >= maxLines) rotate();
     stream.write(formatLogLine(level, message) + '\n');
     currentLines++;

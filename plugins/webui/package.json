@@ -1,0 +1,27 @@
+{
+  "name": "@theclawlab/xgw-plugin-webui",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "WebUI channel plugin for xgw (WebClaw desktop client)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "release:public": "npm run build && npm publish --access public"
+  },
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "@types/ws": "^8.18.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

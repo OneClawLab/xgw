@@ -74,6 +74,9 @@ export async function loadPluginForType(type: string, config?: Config): Promise<
     if (typeof mod['TuiPlugin'] === 'function') {
       return new (mod['TuiPlugin'] as new () => ChannelPlugin)();
     }
+    if (typeof mod['WebuiPlugin'] === 'function') {
+      return new (mod['WebuiPlugin'] as new () => ChannelPlugin)();
+    }
     throw new Error(
       `Plugin module for type "${type}" has no default export, createPlugin, or TuiPlugin export`,
     );

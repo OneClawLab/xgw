@@ -121,8 +121,8 @@ export class Dispatcher {
         } else if (state.streaming) {
           const plugin = this.registry.getPlugin(state.channelId);
           if (plugin) {
-            const accumulatedText = state.tokenBuffer.join('');
-            this.safeSend(plugin, { peer_id: state.peerId, conversation_id: state.conversationId, text: accumulatedText, stream: 'chunk' }, state.channelId);
+            // Send only the incremental token, not the accumulated buffer
+            this.safeSend(plugin, { peer_id: state.peerId, conversation_id: state.conversationId, text: token, stream: 'chunk' }, state.channelId);
           }
         }
         break;

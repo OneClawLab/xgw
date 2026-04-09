@@ -40,9 +40,9 @@ describe('Property 8: XarConfig 默认值正确性', () => {
 
         const cfg = result.value;
 
-        // Missing port → default 28213
+        // Missing port → default 29211
         if (!('port' in raw)) {
-          expect(cfg.port).toBe(28213);
+          expect(cfg.port).toBe(29211);
         } else {
           expect(cfg.port).toBe(raw.port);
         }
@@ -62,7 +62,7 @@ describe('Property 8: XarConfig 默认值正确性', () => {
     const result = parseXarConfig(null);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.port).toBe(28213);
+    expect(result.value.port).toBe(29211);
     expect(result.value.reconnect_interval_ms).toBe(3000);
   });
 });

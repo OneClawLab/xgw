@@ -371,7 +371,7 @@ program
   .requiredOption('--channel <id>', 'Channel ID to connect to')
   .requiredOption('--peer <id>', 'Peer ID to identify as')
   .option('--host <host>', 'TUI plugin host', '127.0.0.1')
-  .option('--port <port>', 'TUI plugin port', '28212')
+  .option('--port <port>', 'TUI plugin port', '29213')
   .action((opts: { channel: string; peer: string; host: string; port: string }) => {
     const port = parseInt(opts.port, 10);
     if (isNaN(port) || port < 1 || port > 65535) {

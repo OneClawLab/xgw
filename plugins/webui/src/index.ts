@@ -120,7 +120,7 @@ export class WebuiPlugin {
   ): Promise<void> {
     this.channelId = config.id;
     this.onMessage = onMessage;
-    const port = typeof config['port'] === 'number' ? config['port'] : 28211;
+    const port = typeof config['port'] === 'number' ? config['port'] : 29212;
 
     this.wss = new WebSocketServer({ port, host: '127.0.0.1' });
 

@@ -94,16 +94,16 @@ xgw/
 ```yaml
 gateway:
   host: 127.0.0.1
-  port: 28211
+  port: 29212
 
 # 新增：xar IPC 连接配置
 xar:
-  port: 28213                     # TCP 端口
+  port: 29211                     # TCP 端口
   reconnect_interval_ms: 3000     # 断线重连间隔（默认 3000）
 
 channels:
   - id: tui:default
-    port: 28212
+    port: 29213
     paired: true
     pair_mode: ws
 
@@ -250,6 +250,7 @@ xgw
 ├── js-yaml     (config 解析)
 ├── commander   (CLI)
 └── plugins/tui (内置 TUI plugin，独立 Node project)
+└── plugins/webui (内置 WebUI plugin，独立 Node project)
 ```
 
 xgw 不依赖 `pai`、`thread`、`xar`（通过 IPC 通信，不 import）。

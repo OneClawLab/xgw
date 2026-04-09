@@ -104,7 +104,7 @@ export class TuiPlugin {
     this.channelId = config.id;
     this.onMessage = onMessage;
     const port =
-      typeof config['port'] === 'number' ? config['port'] : 28212;
+      typeof config['port'] === 'number' ? config['port'] : 29213;
 
     this.wss = new WebSocketServer({ port, host: '127.0.0.1' });
 

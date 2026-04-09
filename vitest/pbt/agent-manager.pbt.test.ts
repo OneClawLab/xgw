@@ -26,7 +26,7 @@ const genRoutingRule = () =>
 
 /** Generate a minimal valid Config with the given routing rules */
 const genConfig = (routing: Array<{ channel: string; peer: string; agent: string }>): Config => ({
-  gateway: { host: '127.0.0.1', port: 28211 },
+  gateway: { host: '127.0.0.1', port: 29212 },
   channels: [],
   routing,
 });

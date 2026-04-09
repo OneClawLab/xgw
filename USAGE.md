@@ -24,15 +24,15 @@ npm run build && npm link
 ```yaml
 gateway:
   host: 127.0.0.1
-  port: 28211
+  port: 29212
 
 # xar IPC 连接配置
 xar:
-  port: 28213                   # TCP 端口
+  port: 29211                   # TCP 端口
   reconnect_interval_ms: 3000   # 断线重连间隔
 
 # 插件注册表：type → npm 包名
-# 内置 tui 插件无需注册
+# 内置 tui / webui 插件无需注册
 plugins:
   telegram: "@theclawlab/xgw-plugin-telegram"
   feishu: "@theclawlab/xgw-plugin-feishu"
@@ -40,7 +40,13 @@ plugins:
 channels:
   - id: tui-main
     type: tui
-    port: 28212
+    port: 29213
+    paired: true
+    pair_mode: ws
+
+  - id: webui-main
+    type: webui
+    port: 29212
     paired: true
     pair_mode: ws
 
@@ -52,6 +58,9 @@ channels:
 
 routing:
   - channel: tui-main
+    peer: "*"
+    agent: admin
+  - channel: webui-main
     peer: "*"
     agent: admin
   - channel: tg-main
@@ -72,7 +81,7 @@ routing:
 
 ## 插件管理
 
-xgw 通过插件支持不同的 channel 类型。TUI 插件内置，其他类型需要安装并注册。
+xgw 通过插件支持不同的 channel 类型。TUI 和 WebUI 插件内置，其他类型需要安装并注册。
 
 ### 安装插件
 
@@ -119,7 +128,7 @@ channels:
 
 1. channel 配置里的 `plugin` 字段（npm 包名）
 2. config.yaml 顶层 `plugins.<type>`（全局注册）
-3. xgw 内置 `plugins/<type>/`（开发 fallback，仅 tui）
+3. xgw 内置 `plugins/<type>/`（开发 fallback，tui 和 webui）
 
 ---
 

@@ -23,7 +23,7 @@ describe('parseXarConfig: complete xar config parsing', () => {
     const result = parseXarConfig({ reconnect_interval_ms: 1000 });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.port).toBe(28213);
+    expect(result.value.port).toBe(29211);
   });
 
   it('fills default reconnect_interval_ms when omitted', () => {
@@ -37,7 +37,7 @@ describe('parseXarConfig: complete xar config parsing', () => {
     const result = parseXarConfig({});
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.port).toBe(28213);
+    expect(result.value.port).toBe(29211);
     expect(result.value.reconnect_interval_ms).toBe(3000);
   });
 
@@ -45,7 +45,7 @@ describe('parseXarConfig: complete xar config parsing', () => {
     const result = parseXarConfig(null);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.port).toBe(28213);
+    expect(result.value.port).toBe(29211);
     expect(result.value.reconnect_interval_ms).toBe(3000);
   });
 });

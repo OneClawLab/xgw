@@ -11,7 +11,7 @@ const genId = () =>
 
 /** Generate a minimal valid Config shell (only routing matters for route manager) */
 const genBaseConfig = (routing: RoutingRule[]): Config => ({
-  gateway: { host: '127.0.0.1', port: 28211 },
+  gateway: { host: '127.0.0.1', port: 29212 },
   channels: [],
   routing,
   agents: {},
